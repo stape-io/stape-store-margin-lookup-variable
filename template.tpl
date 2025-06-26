@@ -84,6 +84,12 @@ ___TEMPLATE_PARAMETERS___
         "checkboxText": "Store response in cache",
         "simpleValueType": true,
         "help": "Store the response in Template Storage. If all parameters of the request are the same response will be taken from the cache if it exists. This will apply to each individual request for a specific product id"
+      },
+      {
+        "type": "CHECKBOX",
+        "name": "roundResult",
+        "checkboxText": "Round result value to 2 decimal places",
+        "simpleValueType": true
       }
     ]
   },
@@ -130,11 +136,16 @@ const sha256Sync = require('sha256Sync');
 const logToConsole = require('logToConsole');
 const getRequestHeader = require('getRequestHeader');
 const getContainerVersion = require('getContainerVersion');
+const getEventData = require('getEventData');
+const makeNumber = require('makeNumber');
+const Math = require('Math');
+
+/*==============================================================================
+==============================================================================*/
+
 const isLoggingEnabled = determinateIsLoggingEnabled();
 const traceId = isLoggingEnabled ? getRequestHeader('trace-id') : undefined;
-const makeNumber = require('makeNumber');
 
-const getEventData = require('getEventData');
 const storeKeyId = data.storeKeyId;
 const storeKeyMargin = data.storeKeyMargin;
 
@@ -142,35 +153,33 @@ const items = data.items ? data.items : getEventData('items');
 const arrKeyQt = data.arrKeyQt ? data.arrKeyQt : 'quantity';
 const arrKeyId = data.arrKeyId ? data.arrKeyId : 'item_id';
 
-let promises = [];
-var res = 0;
+const promises = [];
+let res = 0;
 
-if (!items)
-  return undefined;
+if (!items) return undefined;
 
 for (let i = 0; i < items.length; i++) {
-  if (items[i][arrKeyId]) promises.push(getResponseBody(items[i][arrKeyId])); 
+  if (items[i][arrKeyId]) promises.push(getResponseBody(items[i][arrKeyId]));
 }
 
-return Promise.all(promises)
-  .then((results) => {
-    for (let i = 0; i < results.length; i++) {
-      let qt = makeNumber(items[i][arrKeyQt]) ? makeNumber(items[i][arrKeyQt]) : 1;
-      let tmp = makeNumber(mapResponse(results[i]));
-      if (tmp) 
-        res += tmp * qt;
-      else 
-        res += makeNumber(items[i]['price']) * qt;
-    }
-    return res;
-  });
+return Promise.all(promises).then((results) => {
+  for (let i = 0; i < results.length; i++) {
+    let qt = makeNumber(items[i][arrKeyQt]) ? makeNumber(items[i][arrKeyQt]) : 1;
+    let tmp = makeNumber(mapResponse(results[i]));
+    if (tmp) res += tmp * qt;
+    else res += makeNumber(items[i]['price']) * qt;
+  }
 
+  if (data.roundResult) {
+    res = makeNumber(Math.round(res * 100) / 100);
+  }
 
+  return res;
+});
 
-function getOptions() {
-  return {method: 'POST', headers: { 'Content-Type': 'application/json' }};
-}
-
+/*==============================================================================
+  Vendor related functions
+==============================================================================*/
 
 function mapResponse(bodyString) {
   const body = JSON.parse(bodyString);
@@ -190,6 +199,25 @@ function mapResponse(bodyString) {
   return value;
 }
 
+function getStoreUrl() {
+  const containerIdentifier = getRequestHeader('x-gtm-identifier');
+  const defaultDomain = getRequestHeader('x-gtm-default-domain');
+  const containerApiKey = getRequestHeader('x-gtm-api-key');
+
+  return (
+    'https://' +
+    enc(containerIdentifier) +
+    '.' +
+    enc(defaultDomain) +
+    '/stape-api/' +
+    enc(containerApiKey) +
+    '/v1/store'
+  );
+}
+
+function getOptions() {
+  return { method: 'POST', headers: { 'Content-Type': 'application/json' } };
+}
 
 function getPostBody(productId) {
   return {
@@ -197,7 +225,6 @@ function getPostBody(productId) {
     limit: 1
   };
 }
-
 
 function getResponseBody(productId) {
   const url = getStoreUrl();
@@ -219,7 +246,7 @@ function getResponseBody(productId) {
         EventName: 'StoreRead',
         RequestMethod: options.method,
         RequestUrl: url,
-        RequestBody: postBody,
+        RequestBody: postBody
       })
     );
   }
@@ -233,7 +260,7 @@ function getResponseBody(productId) {
           EventName: 'StoreRead',
           ResponseStatusCode: response.statusCode,
           ResponseHeaders: response.headers,
-          ResponseBody: response.body,
+          ResponseBody: response.body
         })
       );
     }
@@ -244,26 +271,21 @@ function getResponseBody(productId) {
   });
 }
 
-function getStoreUrl() {
-  const containerIdentifier = getRequestHeader('x-gtm-identifier');
-  const defaultDomain = getRequestHeader('x-gtm-default-domain');
-  const containerApiKey = getRequestHeader('x-gtm-api-key');
+/*==============================================================================
+  Helpers
+==============================================================================*/
 
-  return (
-    'https://' +
-    enc(containerIdentifier) +
-    '.' +
-    enc(defaultDomain) +
-    '/stape-api/' +
-    enc(containerApiKey) +
-    '/v1/store'
-  );
+function enc(data) {
+  data = data || '';
+  return encodeUriComponent(data);
 }
-
 
 function determinateIsLoggingEnabled() {
   const containerVersion = getContainerVersion();
-  const isDebug = !!(containerVersion && (containerVersion.debugMode || containerVersion.previewMode));
+  const isDebug = !!(
+    containerVersion &&
+    (containerVersion.debugMode || containerVersion.previewMode)
+  );
 
   if (!data.logType) {
     return isDebug;
@@ -278,11 +300,6 @@ function determinateIsLoggingEnabled() {
   }
 
   return data.logType === 'always';
-}
-
-function enc(data) {
-  data = data || '';
-  return encodeUriComponent(data);
 }
 
 
@@ -375,10 +392,13 @@ ___SERVER_PERMISSIONS___
           "key": "environments",
           "value": {
             "type": 1,
-            "string": "debug"
+            "string": "all"
           }
         }
       ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
     },
     "isRequired": true
   },
