@@ -47,11 +47,12 @@ return Promise.all(responsesForEachItem).then((results) => {
   Vendor related functions
 ==============================================================================*/
 
-function getStoreBaseUrl(data) {
+function getStapeStoreBaseUrl(data) {
   const containerIdentifier = getRequestHeader('x-gtm-identifier');
   const defaultDomain = getRequestHeader('x-gtm-default-domain');
   const containerApiKey = getRequestHeader('x-gtm-api-key');
-  const collectionPath = 'collections/' + enc(data.collectionName || 'default') + '/documents';
+  const collectionPath =
+    'collections/' + enc(data.stapeStoreCollectionName || 'default') + '/documents';
 
   return (
     'https://' +
@@ -88,7 +89,7 @@ function getPostBody(data, itemId) {
 }
 
 function lookupInStore(data) {
-  const url = getStoreBaseUrl(data);
+  const url = getStapeStoreBaseUrl(data);
   const options = getOptions();
   const responses = [];
   const arrKeyId = data.arrKeyId ? data.arrKeyId : 'item_id';
