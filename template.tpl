@@ -44,7 +44,8 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "NON_EMPTY"
       }
-    ]
+    ],
+    "help": "Use dot notation if needed (e.g. \u003ci\u003efoo.id\u003c/i\u003e, \u003ci\u003ebar.0.price\u003c/i\u003e)."
   },
   {
     "type": "LABEL",
