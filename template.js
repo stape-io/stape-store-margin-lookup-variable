@@ -48,11 +48,28 @@ return Promise.all(responsesForEachItem).then((results) => {
 ==============================================================================*/
 
 function getStapeStoreBaseUrl(data) {
-  const containerIdentifier = getRequestHeader('x-gtm-identifier');
-  const defaultDomain = getRequestHeader('x-gtm-default-domain');
-  const containerApiKey = getRequestHeader('x-gtm-api-key');
+  let containerIdentifier;
+  let defaultDomain;
+  let containerApiKey;
   const collectionPath =
     'collections/' + enc(data.stapeStoreCollectionName || 'default') + '/documents';
+
+  const shouldUseDifferentStore =
+    isUIFieldTrue(data.useDifferentStapeStore) &&
+    getType(data.stapeStoreContainerApiKey) === 'string';
+  if (shouldUseDifferentStore) {
+    const containerApiKeyParts = data.stapeStoreContainerApiKey.split(':');
+
+    const containerLocation = containerApiKeyParts[0];
+    const containerRegion = containerApiKeyParts[3] || 'io';
+    containerIdentifier = containerApiKeyParts[1];
+    defaultDomain = containerLocation + '.stape.' + containerRegion;
+    containerApiKey = containerApiKeyParts[2];
+  } else {
+    containerIdentifier = getRequestHeader('x-gtm-identifier');
+    defaultDomain = getRequestHeader('x-gtm-default-domain');
+    containerApiKey = getRequestHeader('x-gtm-api-key');
+  }
 
   return (
     'https://' +
@@ -165,6 +182,10 @@ function mapResponse(data, bodyString) {
 /*==============================================================================
   Helpers
 ==============================================================================*/
+
+function isUIFieldTrue(field) {
+  return [true, 'true', 1, '1'].indexOf(field) !== -1;
+}
 
 function enc(data) {
   return encodeUriComponent(makeString(data || ''));
