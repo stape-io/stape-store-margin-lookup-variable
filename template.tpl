@@ -14,6 +14,7 @@ ___INFO___
   "version": 1,
   "securityGroups": [],
   "displayName": "Stape Store Margin Lookup",
+  "categories": ["UTILITY", "DATA_WAREHOUSING"],
   "description": "This variable allows you to retrieve margin data from Stape Store for each product in your items array and returns a combined margin value (accounting for quantity).",
   "containerContexts": [
     "SERVER"
@@ -115,11 +116,11 @@ ___TEMPLATE_PARAMETERS___
         "selectItems": [
           {
             "value": true,
-            "displayValue": "True"
+            "displayValue": "true"
           },
           {
             "value": false,
-            "displayValue": "False"
+            "displayValue": "false"
           }
         ],
         "simpleValueType": true,
@@ -272,8 +273,6 @@ const BigQuery = require('BigQuery');
 /*==============================================================================
 ==============================================================================*/
 
-const traceId = getRequestHeader('trace-id');
-
 const items = getEventData('items');
 if (getType(items) !== 'array') return undefined;
 
@@ -377,7 +376,6 @@ function lookupInStore(data) {
     log({
       Name: 'StapeStore',
       Type: 'Request',
-      TraceId: traceId,
       EventName: 'StoreRead',
       RequestMethod: options.method,
       RequestUrl: url,
@@ -388,7 +386,6 @@ function lookupInStore(data) {
       log({
         Name: 'StapeStore',
         Type: 'Response',
-        TraceId: traceId,
         EventName: 'StoreRead',
         ResponseStatusCode: response.statusCode,
         ResponseHeaders: response.headers,
@@ -447,6 +444,8 @@ function log(rawDataToLog) {
   const logDestinationsHandlers = {};
   if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
   if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
+
+  rawDataToLog.TraceId = getRequestHeader('trace-id');
 
   const keyMappings = {
     // No transformation for Console is needed.

@@ -20,8 +20,6 @@ const BigQuery = require('BigQuery');
 /*==============================================================================
 ==============================================================================*/
 
-const traceId = getRequestHeader('trace-id');
-
 const items = getEventData('items');
 if (getType(items) !== 'array') return undefined;
 
@@ -125,7 +123,6 @@ function lookupInStore(data) {
     log({
       Name: 'StapeStore',
       Type: 'Request',
-      TraceId: traceId,
       EventName: 'StoreRead',
       RequestMethod: options.method,
       RequestUrl: url,
@@ -136,7 +133,6 @@ function lookupInStore(data) {
       log({
         Name: 'StapeStore',
         Type: 'Response',
-        TraceId: traceId,
         EventName: 'StoreRead',
         ResponseStatusCode: response.statusCode,
         ResponseHeaders: response.headers,
@@ -195,6 +191,8 @@ function log(rawDataToLog) {
   const logDestinationsHandlers = {};
   if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
   if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
+
+  rawDataToLog.TraceId = getRequestHeader('trace-id');
 
   const keyMappings = {
     // No transformation for Console is needed.
