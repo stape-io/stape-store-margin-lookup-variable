@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/stape-store-margin-lookup-variable'
 versions:
+  - sha: 18254a9ee08f350cad50257f08b83f929ef4c2d8
+    changeNotes: Added Stape Store 2.0 support. Added BigQuery logging support.
   - sha: 2fae97df7f1ae35c595fa2c0955d57cc53ec099f
     changeNotes: Add round result option. Format code with Prettier.
   - sha: 2fca7421ee26ac229dd710e77f8a255f546bd5ce
