@@ -1,5 +1,3 @@
-/// <reference path="./server-gtm-sandboxed-apis.d.ts" />
-
 const sendHttpRequest = require('sendHttpRequest');
 const encodeUriComponent = require('encodeUriComponent');
 const JSON = require('JSON');
@@ -10,6 +8,7 @@ const logToConsole = require('logToConsole');
 const getRequestHeader = require('getRequestHeader');
 const getContainerVersion = require('getContainerVersion');
 const getEventData = require('getEventData');
+const makeInteger = require('makeInteger');
 const makeNumber = require('makeNumber');
 const makeString = require('makeString');
 const Math = require('Math');
@@ -20,44 +19,44 @@ const BigQuery = require('BigQuery');
 /*==============================================================================
 ==============================================================================*/
 
-const items = getEventData('items');
-if (getType(items) !== 'array') return undefined;
+const items = data.itemsSource === 'ga4' ? getEventData('items') : data.customItems;
+if (getType(items) !== 'array') return;
 
-const responsesForEachItem = lookupInStore(data, items);
-return Promise.all(responsesForEachItem).then((results) => {
-  let res = 0;
-
-  results.forEach((result, index) => {
-    const qt = makeNumber(items[index].quantity) || 1;
-    const tmp = makeNumber(mapResponse(data, result));
-    if (tmp) res += tmp * qt;
-    else res += makeNumber(items[index].price) * qt;
+const itemsProfitRequests = getProfitforItems(data, items);
+const profit = Promise.all(itemsProfitRequests)
+  .then((itemsWithProfitInfo) => calculateProfit(itemsWithProfitInfo))
+  .catch((result) => {
+    log({
+      Name: 'StapeProductFeed',
+      Type: 'Message',
+      EventName: 'ReadItemProfit',
+      Message: 'Something went wrong.',
+      Reason: JSON.stringify(result)
+    });
+    return;
   });
 
-  if (data.roundResult) {
-    res = makeNumber(Math.round(res * 100) / 100);
-  }
-
-  return res;
-});
+return profit;
 
 /*==============================================================================
   Vendor related functions
 ==============================================================================*/
 
-function getStapeStoreBaseUrl(data) {
+function getStapeProductFeedItemUrl(baseUrl, itemId) {
+  return baseUrl + '/products/' + enc(itemId);
+}
+
+function getStapeProductFeedBaseUrl(data) {
   let containerIdentifier;
   let defaultDomain;
   let containerApiKey;
-  const collectionPath =
-    'collections/' + enc(data.stapeStoreCollectionName || 'default') + '/documents';
+  const feedPath = '/feeds/default';
 
   const shouldUseDifferentStore =
-    isUIFieldTrue(data.useDifferentStapeStore) &&
-    getType(data.stapeStoreContainerApiKey) === 'string';
+    isUIFieldTrue(data.useDifferentStapeProductFeed) &&
+    getType(data.stapeProductFeedContainerApiKey) === 'string';
   if (shouldUseDifferentStore) {
-    const containerApiKeyParts = data.stapeStoreContainerApiKey.split(':');
-
+    const containerApiKeyParts = data.stapeProductFeedContainerApiKey.split(':');
     const containerLocation = containerApiKeyParts[0];
     const containerRegion = containerApiKeyParts[3] || 'io';
     containerIdentifier = containerApiKeyParts[1];
@@ -76,103 +75,113 @@ function getStapeStoreBaseUrl(data) {
     enc(defaultDomain) +
     '/stape-api/' +
     enc(containerApiKey) +
-    '/v2/store/' +
-    collectionPath
+    '/v2/poas' +
+    feedPath
   );
 }
 
-function getOptions() {
-  return { method: 'POST', headers: { 'Content-Type': 'application/json' } };
+function getRequestOptions() {
+  return { method: 'GET' };
 }
 
-function getPostBody(data, itemId) {
-  return {
-    filter: {
-      operator: 'and',
-      conditions: [
-        {
-          field: data.storeKeyId,
-          operator: 'equal',
-          value: itemId
-        }
-      ]
-    },
-    pagination: {
-      limit: 1
-    }
-  };
-}
+function getProfitforItems(data, items) {
+  const useCache = data.useCache;
+  const requestBaseUrl = getStapeProductFeedBaseUrl(data);
+  const requestOptions = getRequestOptions();
+  const itemIdKey = data.itemsSource === 'ga4' ? data.ga4ItemIdKey : data.customItemIdKey;
+  const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
+  const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
 
-function lookupInStore(data) {
-  const url = getStapeStoreBaseUrl(data);
-  const options = getOptions();
-  const responses = [];
-  const arrKeyId = data.arrKeyId ? data.arrKeyId : 'item_id';
+  const responsePromises = items.map((item) => {
+    const itemId = item[itemIdKey];
+    const baseItem = {
+      price: makeNumber(item[itemPriceKey]) || undefined,
+      quantity: makeInteger(item[itemQuantityKey]) || 1
+    };
 
-  items.forEach((item) => {
-    const itemId = item[arrKeyId];
+    const requestUrl = getStapeProductFeedItemUrl(requestBaseUrl, itemId);
 
-    const postBody = getPostBody(data, itemId);
-    const cacheKey = data.storeResponse ? sha256Sync(url + JSON.stringify(postBody)) : '';
-
-    if (data.storeResponse) {
+    const cacheKey = useCache ? sha256Sync(requestUrl) : undefined;
+    if (useCache) {
       const cachedValue = templateDataStorage.getItemCopy(cacheKey);
-      if (cachedValue) return responses.push(Promise.create((resolve) => resolve(cachedValue)));
+      if (cachedValue) {
+        const cachedItemProfitInfo = cachedValue.profitInfo;
+        const cachedItemExpiresAt = cachedValue.expiresAt;
+        if (getTimestampMillis() < cachedItemExpiresAt) {
+          return Promise.create((resolve) => resolve(mergeObj(baseItem, cachedItemProfitInfo)));
+        }
+      }
     }
 
     log({
-      Name: 'StapeStore',
+      Name: 'StapeProductFeed',
       Type: 'Request',
-      EventName: 'StoreRead',
-      RequestMethod: options.method,
-      RequestUrl: url,
-      RequestBody: postBody
+      EventName: 'ReadItemProfit',
+      RequestMethod: requestOptions.method,
+      RequestUrl: requestUrl
     });
 
-    const response = sendHttpRequest(url, options, JSON.stringify(postBody)).then((response) => {
-      log({
-        Name: 'StapeStore',
-        Type: 'Response',
-        EventName: 'StoreRead',
-        ResponseStatusCode: response.statusCode,
-        ResponseHeaders: response.headers,
-        ResponseBody: response.body
+    return sendHttpRequest(requestUrl, requestOptions)
+      .then((result) => {
+        log({
+          Name: 'StapeProductFeed',
+          Type: 'result',
+          EventName: 'ReadItemProfit',
+          ResponseStatusCode: result.statusCode,
+          ResponseHeaders: result.headers,
+          ResponseBody: result.body
+        });
+
+        const parsedBody = JSON.parse(result.body || '{}');
+
+        if (result.statusCode === 200 && parsedBody.success) {
+          const profitInfo = {
+            profit: makeNumber(parsedBody.data.value),
+            profitType: parsedBody.data.value_type
+          };
+
+          if (useCache) {
+            templateDataStorage.setItemCopy(cacheKey, {
+              profitInfo: profitInfo,
+              expiresAt: getTimestampMillis() + makeInteger(data.cacheExpirationTime) * 60 * 1000
+            });
+          }
+
+          return mergeObj(baseItem, profitInfo);
+        }
+        return baseItem;
+      })
+      .catch((result) => {
+        log({
+          Name: 'StapeProductFeed',
+          Type: 'Message',
+          EventName: 'ReadItemProfit',
+          Message: 'Request failed or timed out.',
+          Reason: JSON.stringify(result)
+        });
+        return baseItem;
       });
-
-      if (data.storeResponse) templateDataStorage.setItemCopy(cacheKey, response.body);
-
-      return response.body;
-    });
-
-    responses.push(response);
   });
 
-  return responses;
+  return responsePromises;
 }
 
-function mapResponse(data, bodyString) {
-  const body = JSON.parse(bodyString || '{}');
-  const document =
-    getType(body) === 'object' &&
-    getType(body.data) === 'object' &&
-    getType(body.data.items) === 'array' &&
-    getType(body.data.items[0]) === 'object'
-      ? body.data.items[0]
-      : {};
-  const storedData = document.data || {};
+function calculateProfit(itemsWithProfitInfo) {
+  const profit = itemsWithProfitInfo.reduce((acc, item) => {
+    if (getType(item.profit) === 'number') {
+      if (item.profitType === 'absolute') {
+        return acc + item.profit * item.quantity;
+      } else if (item.profitType === 'percent' && getType(item.price) === 'number') {
+        return acc + item.price * (item.profit / 100) * item.quantity;
+      }
+    } else if (data.useItemPriceAsFallback && getType(item.price) === 'number') {
+      return acc + item.price * item.quantity;
+    }
+    return acc;
+  }, 0.0);
 
-  const storeKeyMargin = data.storeKeyMargin;
-  if (!storeKeyMargin) return storedData;
-
-  const keys = storeKeyMargin.trim().split('.');
-  let value = storedData;
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    if (!value || !key) break;
-    value = value[key];
-  }
-
-  return value;
+  if (data.roundResult) return makeNumber(Math.round(profit * 100) / 100);
+  return profit;
 }
 
 /*==============================================================================
@@ -184,7 +193,15 @@ function isUIFieldTrue(field) {
 }
 
 function enc(data) {
-  return encodeUriComponent(makeString(data || ''));
+  if (['null', 'undefined'].indexOf(getType(data)) !== -1) data = '';
+  return encodeUriComponent(makeString(data));
+}
+
+function mergeObj(target, source) {
+  for (const key in source) {
+    if (source.hasOwnProperty(key)) target[key] = source[key];
+  }
+  return target;
 }
 
 function log(rawDataToLog) {
