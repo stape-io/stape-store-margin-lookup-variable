@@ -1,7 +1,7 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/stape-store-margin-lookup-variable'
 versions:
-  - sha: d5ba3177554b28e0032bc45fd2daf7ca8dbdeeae
+  - sha: 6f52f55d54631358af7fda1bdd2d12651c055a68
     changeNotes: BREAKING CHANGES! REVIEW YOUR VARIABLE CAREFULLY AND UPDATE TO STAPE PRODUCT FEED. Added Stape Product Feed support.
   - sha: 18254a9ee08f350cad50257f08b83f929ef4c2d8
     changeNotes: Added Stape Store 2.0 support. Added BigQuery logging support.
