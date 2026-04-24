@@ -131,7 +131,7 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "CHECKBOX",
         "name": "useCache",
-        "checkboxText": "Store the each Item Margin in cache",
+        "checkboxText": "Store each Item Margin in cache",
         "simpleValueType": true,
         "help": "Store the response in Template Storage.  \n\u003cbr/\u003e\nIf a request is made with identical parameters, the cached response (if available) will be reused instead of sending a new request.  \n\u003cbr/\u003e\nThis caching applies separately to each unique Item ID.",
         "subParams": [
@@ -217,6 +217,92 @@ ___TEMPLATE_PARAMETERS___
           }
         ],
         "defaultValue": false
+      },
+      {
+        "type": "CHECKBOX",
+        "name": "useCustomStoreCollection",
+        "checkboxText": "Use a Stape Store custom collection",
+        "simpleValueType": true,
+        "help": "By default this variable will lookup on POAS Data Feed Power Up database in your Stape account. Check this box to lookup in a different, custom collection from Stape Store.",
+        "defaultValue": false,
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "containerApiKey",
+            "displayName": "Container API Key",
+            "simpleValueType": true,
+            "help": "Your Stape container API Key. It can be found on your Stape container overview under \u003cb\u003eSettings\u003c/b\u003e.",
+            "enablingConditions": [
+              {
+                "paramName": "useCustomStoreCollection",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ],
+            "valueHint": "euk:kzlfoobar:55ec021d429be49e64e691429cf0f27440a1b789kzlfoobar"
+          },
+          {
+            "type": "TEXT",
+            "name": "customCollectionName",
+            "displayName": "Custom collection name",
+            "simpleValueType": true,
+            "enablingConditions": [
+              {
+                "paramName": "useCustomStoreCollection",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "help": "Enter your feed collection name as it shows on Stape Store. If left empty it will use the \u003cb\u003edefault\u003c/b\u003e collection.",
+            "defaultValue": "default",
+            "valueHint": "default"
+          },
+          {
+            "type": "TEXT",
+            "name": "valueKey",
+            "displayName": "Feed key for profit margin",
+            "simpleValueType": true,
+            "enablingConditions": [
+              {
+                "paramName": "useCustomStoreCollection",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "defaultValue": "price",
+            "help": "Enter the key from your feed that represents your item  profit margin.",
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
+          },
+          {
+            "type": "TEXT",
+            "name": "valueTypeKey",
+            "displayName": "Feed key for value type",
+            "simpleValueType": true,
+            "enablingConditions": [
+              {
+                "paramName": "useCustomStoreCollection",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "help": "Enter the key from your feed that represents the type of profit value: \u003cb\u003eabsolute\u003c/b\u003e or \u003cb\u003epercent\u003c/b\u003e.",
+            "defaultValue": "value_type",
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
+          }
+        ]
       }
     ]
   },
@@ -321,23 +407,23 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_SERVER___
 
-const sendHttpRequest = require('sendHttpRequest');
+const BigQuery = require('BigQuery');
 const encodeUriComponent = require('encodeUriComponent');
-const JSON = require('JSON');
-const templateDataStorage = require('templateDataStorage');
-const Promise = require('Promise');
-const sha256Sync = require('sha256Sync');
-const logToConsole = require('logToConsole');
-const getRequestHeader = require('getRequestHeader');
 const getContainerVersion = require('getContainerVersion');
 const getEventData = require('getEventData');
+const getRequestHeader = require('getRequestHeader');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
+const JSON = require('JSON');
+const logToConsole = require('logToConsole');
 const makeInteger = require('makeInteger');
 const makeNumber = require('makeNumber');
 const makeString = require('makeString');
 const Math = require('Math');
-const getTimestampMillis = require('getTimestampMillis');
-const getType = require('getType');
-const BigQuery = require('BigQuery');
+const Promise = require('Promise');
+const sendHttpRequest = require('sendHttpRequest');
+const sha256Sync = require('sha256Sync');
+const templateDataStorage = require('templateDataStorage');
 
 /*==============================================================================
 ==============================================================================*/
@@ -366,20 +452,26 @@ return profit;
 ==============================================================================*/
 
 function getStapeProductFeedItemUrl(baseUrl, itemId) {
-  return baseUrl + '/products/' + enc(itemId);
+  const innerPath = data.useCustomStoreCollection ? '' : '/products/';
+  return baseUrl + innerPath + enc(itemId);
 }
 
 function getStapeProductFeedBaseUrl(data) {
+  const customCollectionName = data.customCollectionName;
+  const poasFeedPath = 'poas/feeds/default';
+  const collectionFeedPath = 'collections/' + enc(customCollectionName) + '/documents/';
   let containerIdentifier;
   let defaultDomain;
-  let containerApiKey;
-  const feedPath = '/feeds/default';
+  let containerApiKey = data.stapeProductFeedContainerApiKey || data.containerApiKey;
 
   const shouldUseDifferentStore =
-    isUIFieldTrue(data.useDifferentStapeProductFeed) &&
-    getType(data.stapeProductFeedContainerApiKey) === 'string';
-  if (shouldUseDifferentStore) {
-    const containerApiKeyParts = data.stapeProductFeedContainerApiKey.split(':');
+    isUIFieldTrue(data.useDifferentStapeProductFeed) && getType(containerApiKey) === 'string';
+
+  const shouldUseCustomCollection =
+    data.useCustomStoreCollection && getType(containerApiKey) === 'string';
+
+  if (shouldUseDifferentStore || shouldUseCustomCollection) {
+    const containerApiKeyParts = containerApiKey.split(':');
     const containerLocation = containerApiKeyParts[0];
     const containerRegion = containerApiKeyParts[3] || 'io';
     containerIdentifier = containerApiKeyParts[1];
@@ -391,6 +483,8 @@ function getStapeProductFeedBaseUrl(data) {
     containerApiKey = getRequestHeader('x-gtm-api-key');
   }
 
+  const lookupPath = shouldUseCustomCollection ? 'store/' + collectionFeedPath : poasFeedPath;
+
   return (
     'https://' +
     enc(containerIdentifier) +
@@ -398,8 +492,8 @@ function getStapeProductFeedBaseUrl(data) {
     enc(defaultDomain) +
     '/stape-api/' +
     enc(containerApiKey) +
-    '/v2/poas' +
-    feedPath
+    '/v2/' +
+    lookupPath
   );
 }
 
@@ -415,12 +509,23 @@ function getProfitforItems(data, items) {
   const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
   const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
 
+  const feedItemPriceKey = data.useCustomStoreCollection && data.valueKey;
+  const feedItemValueTypeKey = data.useCustomStoreCollection && data.valueTypeKey;
+
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
+
+    let parsedPrice = makeNumber(item[itemPriceKey]);
+    let parsedQty = makeInteger(item[itemQuantityKey]);
+
     const baseItem = {
-      price: makeNumber(item[itemPriceKey]) || undefined,
-      quantity: makeInteger(item[itemQuantityKey]) || 1
+      price: parsedPrice === 0 ? 0 : parsedPrice || undefined,
+      quantity: parsedQty || 1
     };
+
+    if (!itemId) {
+      return Promise.create((resolve) => resolve(baseItem));
+    }
 
     const requestUrl = getStapeProductFeedItemUrl(requestBaseUrl, itemId);
 
@@ -448,7 +553,7 @@ function getProfitforItems(data, items) {
       .then((result) => {
         log({
           Name: 'StapeProductFeed',
-          Type: 'result',
+          Type: 'Response',
           EventName: 'ReadItemProfit',
           ResponseStatusCode: result.statusCode,
           ResponseHeaders: result.headers,
@@ -458,9 +563,20 @@ function getProfitforItems(data, items) {
         const parsedBody = JSON.parse(result.body || '{}');
 
         if (result.statusCode === 200 && parsedBody.success) {
+          let profitValue;
+          let profitType;
+
+          if (data.useCustomStoreCollection && parsedBody.data.data) {
+            profitValue = parsedBody.data.data[feedItemPriceKey];
+            profitType = parsedBody.data.data[feedItemValueTypeKey];
+          } else {
+            profitValue = parsedBody.data.value;
+            profitType = parsedBody.data.value_type;
+          }
+
           const profitInfo = {
-            profit: makeNumber(parsedBody.data.value),
-            profitType: parsedBody.data.value_type
+            profit: makeNumber(profitValue),
+            profitType: profitType || 'absolute'
           };
 
           if (useCache) {
@@ -474,13 +590,13 @@ function getProfitforItems(data, items) {
         }
         return baseItem;
       })
-      .catch((result) => {
+      .catch((error) => {
         log({
           Name: 'StapeProductFeed',
           Type: 'Message',
           EventName: 'ReadItemProfit',
           Message: 'Request failed or timed out.',
-          Reason: JSON.stringify(result)
+          Reason: JSON.stringify(error)
         });
         return baseItem;
       });
@@ -1192,4 +1308,5 @@ setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\ncons
 ___NOTES___
 
 Created on 17/09/2024, 11:34:39
+
 

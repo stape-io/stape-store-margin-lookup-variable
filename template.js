@@ -1,20 +1,20 @@
-const sendHttpRequest = require('sendHttpRequest');
+const BigQuery = require('BigQuery');
 const encodeUriComponent = require('encodeUriComponent');
-const JSON = require('JSON');
-const templateDataStorage = require('templateDataStorage');
-const Promise = require('Promise');
-const sha256Sync = require('sha256Sync');
-const logToConsole = require('logToConsole');
-const getRequestHeader = require('getRequestHeader');
 const getContainerVersion = require('getContainerVersion');
 const getEventData = require('getEventData');
+const getRequestHeader = require('getRequestHeader');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
+const JSON = require('JSON');
+const logToConsole = require('logToConsole');
 const makeInteger = require('makeInteger');
 const makeNumber = require('makeNumber');
 const makeString = require('makeString');
 const Math = require('Math');
-const getTimestampMillis = require('getTimestampMillis');
-const getType = require('getType');
-const BigQuery = require('BigQuery');
+const Promise = require('Promise');
+const sendHttpRequest = require('sendHttpRequest');
+const sha256Sync = require('sha256Sync');
+const templateDataStorage = require('templateDataStorage');
 
 /*==============================================================================
 ==============================================================================*/
@@ -43,20 +43,26 @@ return profit;
 ==============================================================================*/
 
 function getStapeProductFeedItemUrl(baseUrl, itemId) {
-  return baseUrl + '/products/' + enc(itemId);
+  const innerPath = data.useCustomStoreCollection ? '' : '/products/';
+  return baseUrl + innerPath + enc(itemId);
 }
 
 function getStapeProductFeedBaseUrl(data) {
+  const customCollectionName = data.customCollectionName;
+  const poasFeedPath = 'poas/feeds/default';
+  const collectionFeedPath = 'collections/' + enc(customCollectionName) + '/documents/';
   let containerIdentifier;
   let defaultDomain;
-  let containerApiKey;
-  const feedPath = '/feeds/default';
+  let containerApiKey = data.stapeProductFeedContainerApiKey || data.containerApiKey;
 
   const shouldUseDifferentStore =
-    isUIFieldTrue(data.useDifferentStapeProductFeed) &&
-    getType(data.stapeProductFeedContainerApiKey) === 'string';
-  if (shouldUseDifferentStore) {
-    const containerApiKeyParts = data.stapeProductFeedContainerApiKey.split(':');
+    isUIFieldTrue(data.useDifferentStapeProductFeed) && getType(containerApiKey) === 'string';
+
+  const shouldUseCustomCollection =
+    data.useCustomStoreCollection && getType(containerApiKey) === 'string';
+
+  if (shouldUseDifferentStore || shouldUseCustomCollection) {
+    const containerApiKeyParts = containerApiKey.split(':');
     const containerLocation = containerApiKeyParts[0];
     const containerRegion = containerApiKeyParts[3] || 'io';
     containerIdentifier = containerApiKeyParts[1];
@@ -68,6 +74,8 @@ function getStapeProductFeedBaseUrl(data) {
     containerApiKey = getRequestHeader('x-gtm-api-key');
   }
 
+  const lookupPath = shouldUseCustomCollection ? 'store/' + collectionFeedPath : poasFeedPath;
+
   return (
     'https://' +
     enc(containerIdentifier) +
@@ -75,8 +83,8 @@ function getStapeProductFeedBaseUrl(data) {
     enc(defaultDomain) +
     '/stape-api/' +
     enc(containerApiKey) +
-    '/v2/poas' +
-    feedPath
+    '/v2/' +
+    lookupPath
   );
 }
 
@@ -92,12 +100,23 @@ function getProfitforItems(data, items) {
   const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
   const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
 
+  const feedItemPriceKey = data.useCustomStoreCollection && data.valueKey;
+  const feedItemValueTypeKey = data.useCustomStoreCollection && data.valueTypeKey;
+
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
+
+    let parsedPrice = makeNumber(item[itemPriceKey]);
+    let parsedQty = makeInteger(item[itemQuantityKey]);
+
     const baseItem = {
-      price: makeNumber(item[itemPriceKey]) || undefined,
-      quantity: makeInteger(item[itemQuantityKey]) || 1
+      price: parsedPrice === 0 ? 0 : parsedPrice || undefined,
+      quantity: parsedQty || 1
     };
+
+    if (!itemId) {
+      return Promise.create((resolve) => resolve(baseItem));
+    }
 
     const requestUrl = getStapeProductFeedItemUrl(requestBaseUrl, itemId);
 
@@ -125,7 +144,7 @@ function getProfitforItems(data, items) {
       .then((result) => {
         log({
           Name: 'StapeProductFeed',
-          Type: 'result',
+          Type: 'Response',
           EventName: 'ReadItemProfit',
           ResponseStatusCode: result.statusCode,
           ResponseHeaders: result.headers,
@@ -135,9 +154,20 @@ function getProfitforItems(data, items) {
         const parsedBody = JSON.parse(result.body || '{}');
 
         if (result.statusCode === 200 && parsedBody.success) {
+          let profitValue;
+          let profitType;
+
+          if (data.useCustomStoreCollection && parsedBody.data.data) {
+            profitValue = parsedBody.data.data[feedItemPriceKey];
+            profitType = parsedBody.data.data[feedItemValueTypeKey];
+          } else {
+            profitValue = parsedBody.data.value;
+            profitType = parsedBody.data.value_type;
+          }
+
           const profitInfo = {
-            profit: makeNumber(parsedBody.data.value),
-            profitType: parsedBody.data.value_type
+            profit: makeNumber(profitValue),
+            profitType: profitType || 'absolute'
           };
 
           if (useCache) {
@@ -151,13 +181,13 @@ function getProfitforItems(data, items) {
         }
         return baseItem;
       })
-      .catch((result) => {
+      .catch((error) => {
         log({
           Name: 'StapeProductFeed',
           Type: 'Message',
           EventName: 'ReadItemProfit',
           Message: 'Request failed or timed out.',
-          Reason: JSON.stringify(result)
+          Reason: JSON.stringify(error)
         });
         return baseItem;
       });
