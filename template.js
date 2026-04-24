@@ -43,26 +43,21 @@ return profit;
 ==============================================================================*/
 
 function getStapeProductFeedItemUrl(baseUrl, itemId) {
-  const innerPath = data.useCustomStoreCollection ? '' : '/products/';
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
+  const innerPath = useStapeStore ? '/' : '/products/';
   return baseUrl + innerPath + enc(itemId);
 }
 
 function getStapeProductFeedBaseUrl(data) {
-  const customCollectionName = data.customCollectionName;
-  const poasFeedPath = 'poas/feeds/default';
-  const collectionFeedPath = 'collections/' + enc(customCollectionName) + '/documents/';
   let containerIdentifier;
   let defaultDomain;
-  let containerApiKey = data.stapeProductFeedContainerApiKey || data.containerApiKey;
+  let containerApiKey;
 
   const shouldUseDifferentStore =
-    isUIFieldTrue(data.useDifferentStapeProductFeed) && getType(containerApiKey) === 'string';
-
-  const shouldUseCustomCollection =
-    data.useCustomStoreCollection && getType(containerApiKey) === 'string';
-
-  if (shouldUseDifferentStore || shouldUseCustomCollection) {
-    const containerApiKeyParts = containerApiKey.split(':');
+    isUIFieldTrue(data.useDifferentStapeProductFeed) &&
+    getType(data.stapeProductFeedContainerApiKey) === 'string';
+  if (shouldUseDifferentStore) {
+    const containerApiKeyParts = data.stapeProductFeedContainerApiKey.split(':');
     const containerLocation = containerApiKeyParts[0];
     const containerRegion = containerApiKeyParts[3] || 'io';
     containerIdentifier = containerApiKeyParts[1];
@@ -74,7 +69,10 @@ function getStapeProductFeedBaseUrl(data) {
     containerApiKey = getRequestHeader('x-gtm-api-key');
   }
 
-  const lookupPath = shouldUseCustomCollection ? 'store/' + collectionFeedPath : poasFeedPath;
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
+  const lookupPath = useStapeStore
+    ? 'store/collections/' + enc(data.stapeStoreCollectionName || 'default') + '/documents'
+    : 'poas/feeds/default';
 
   return (
     'https://' +
@@ -93,6 +91,7 @@ function getRequestOptions() {
 }
 
 function getProfitforItems(data, items) {
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
   const useCache = data.useCache;
   const requestBaseUrl = getStapeProductFeedBaseUrl(data);
   const requestOptions = getRequestOptions();
@@ -100,26 +99,12 @@ function getProfitforItems(data, items) {
   const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
   const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
 
-  const feedItemPriceKey = data.useCustomStoreCollection && data.valueKey;
-  const feedItemValueTypeKey = data.useCustomStoreCollection && data.valueTypeKey;
-
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
-
-    let rawPrice = item[itemPriceKey];
-    let rawQty = item[itemQuantityKey];
-
-    let parsedPrice = makeNumber(rawPrice);
-    let parsedQty = makeInteger(rawQty);
-
     const baseItem = {
-      price: rawPrice !== undefined && parsedPrice === 0 ? 0 : parsedPrice || undefined,
-      quantity:
-        rawQty !== undefined && getType(parsedQty) === 'number' && parsedQty === parsedQty
-          ? parsedQty
-          : 1
+      price: makeNumber(item[itemPriceKey]) || undefined,
+      quantity: makeInteger(item[itemQuantityKey]) || 1
     };
-
     if (!itemId) {
       return Promise.create((resolve) => resolve(baseItem));
     }
@@ -163,10 +148,10 @@ function getProfitforItems(data, items) {
           let profitValue;
           let profitType;
 
-          if (data.useCustomStoreCollection && parsedBody.data.data) {
-            profitValue = parsedBody.data.data[feedItemPriceKey];
-            profitType = parsedBody.data.data[feedItemValueTypeKey];
-          } else {
+          if (useStapeStore && parsedBody.data.data) {
+            profitValue = parsedBody.data.data[data.stapeStoreValueKey || 'margin'];
+            profitType = parsedBody.data.data[data.stapeStoreValueTypeKey || 'value_type'];
+          } else if (!useStapeStore) {
             profitValue = parsedBody.data.value;
             profitType = parsedBody.data.value_type;
           }
