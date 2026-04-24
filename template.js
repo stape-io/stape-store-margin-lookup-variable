@@ -106,12 +106,18 @@ function getProfitforItems(data, items) {
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
 
-    let parsedPrice = makeNumber(item[itemPriceKey]);
-    let parsedQty = makeInteger(item[itemQuantityKey]);
+    let rawPrice = item[itemPriceKey];
+    let rawQty = item[itemQuantityKey];
+
+    let parsedPrice = makeNumber(rawPrice);
+    let parsedQty = makeInteger(rawQty);
 
     const baseItem = {
-      price: parsedPrice === 0 ? 0 : parsedPrice || undefined,
-      quantity: parsedQty || 1
+      price: rawPrice !== undefined && parsedPrice === 0 ? 0 : parsedPrice || undefined,
+      quantity:
+        rawQty !== undefined && getType(parsedQty) === 'number' && parsedQty === parsedQty
+          ? parsedQty
+          : 1
     };
 
     if (!itemId) {

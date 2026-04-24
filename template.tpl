@@ -515,12 +515,18 @@ function getProfitforItems(data, items) {
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
 
-    let parsedPrice = makeNumber(item[itemPriceKey]);
-    let parsedQty = makeInteger(item[itemQuantityKey]);
+    let rawPrice = item[itemPriceKey];
+    let rawQty = item[itemQuantityKey];
+
+    let parsedPrice = makeNumber(rawPrice);
+    let parsedQty = makeInteger(rawQty);
 
     const baseItem = {
-      price: parsedPrice === 0 ? 0 : parsedPrice || undefined,
-      quantity: parsedQty || 1
+      price: rawPrice !== undefined && parsedPrice === 0 ? 0 : parsedPrice || undefined,
+      quantity:
+        rawQty !== undefined && getType(parsedQty) === 'number' && parsedQty === parsedQty
+          ? parsedQty
+          : 1
     };
 
     if (!itemId) {
@@ -1249,6 +1255,32 @@ scenarios:
     \    const expectedRoundedProfit = makeNumber(Math.round(expectedProfit * 100)\
     \ / 100);\n    assertThat(variableResult).isEqualTo(expectedRoundedProfit);\n\
     \  });\n});"
+- name: '[Custom Collection] Successful Profit Lookup (Percent)'
+  code: "const log = require('logToConsole');\nconst copyMockData = setAllMockData('ga4',\
+    \ {\n      useCustomStoreCollection: true,\n      containerApiKey: 'eu:test-id:test-api-key:io',\n\
+    \      customCollectionName: 'marginCollection',\n      valueKey: 'margin',\n\
+    \      valueTypeKey: 'marginType'\n    });\nlog(copyMockData);\n    setGetEventData([\n\
+    \      { item_id: 'SKU-001', price: 200, quantity: 2 }\n    ]);\n\n    mock('sendHttpRequest',\
+    \ (requestUrl) => {\n      assertThat(requestUrl).contains('/store/collections/marginCollection/documents/SKU-001');\n\
+    \      \n      const mockResponseBody = {\n        success: true,\n        data:\
+    \ {\n          data: { margin: 15, marginType: 'percent' }\n        }\n      };\n\
+    \n      return Promise.create((resolve) => resolve({ \n        statusCode: 200,\
+    \ \n        body: JSON.stringify(mockResponseBody) \n      }));\n    });\n\n \
+    \   runCode(copyMockData).then((profit) => {\n      // 200 (price) * 0.15 (15%)\
+    \ * 2 (quantity) = 60\n      assertThat(profit).isEqualTo(60);\n    });"
+- name: '[Custom Collection] Successful Profit Lookup (Absolute)'
+  code: "const copyMockData = setAllMockData('ga4', {\n      useCustomStoreCollection:\
+    \ true,\n      containerApiKey: 'eu:test-id:test-api-key:io', // <-- Added missing\
+    \ required field\n      customCollectionName: 'wholesale_feed',\n      valueKey:\
+    \ 'abs_margin',\n      valueTypeKey: 'type_margin'\n    });\n\n    setGetEventData([\n\
+    \      { item_id: 'SKU-002', price: 100, quantity: 3 }\n    ]);\n\n    mock('sendHttpRequest',\
+    \ (requestUrl) => {\n      assertThat(requestUrl).contains('/store/collections/wholesale_feed/documents/SKU-002');\n\
+    \      \n      const mockResponseBody = {\n        success: true,\n        data:\
+    \ {\n          data: { abs_margin: 5.50, type_margin: 'absolute' }\n        }\n\
+    \      };\n\n      return Promise.create((resolve) => resolve({ \n        statusCode:\
+    \ 200, \n        body: JSON.stringify(mockResponseBody) \n      }));\n    });\n\
+    runCode(copyMockData).then((profit) => {\n      // 5.50 (absolute margin) * 3\
+    \ (quantity) = 16.50\n      assertThat(profit).isEqualTo(16.5);\n    });"
 setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\nconst\
   \ parseUrl = require('parseUrl');\nconst Object = require('Object');\nconst makeInteger\
   \ = require('makeInteger');\nconst makeNumber = require('makeNumber');\nconst toBase64\

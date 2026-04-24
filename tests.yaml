@@ -1,0 +1,690 @@
+setup: |-
+  const JSON = require('JSON');
+  const Promise = require('Promise');
+  const parseUrl = require('parseUrl');
+  const Object = require('Object');
+  const makeInteger = require('makeInteger');
+  const makeNumber = require('makeNumber');
+  const toBase64 = require('toBase64');
+  const sha256Sync = require('sha256Sync');
+  const callLater = require('callLater');
+  const getEventData = require('getEventData');
+  const getType = require('getType');
+  const Math = require('Math');
+
+  const assign = () => {
+    const target = arguments[0];
+    for (let i = 1; i < arguments.length; i++) {
+      for (let key in arguments[i]) {
+        target[key] = arguments[i][key];
+      }
+    }
+    return target;
+  };
+
+  const createMockItemsWithProfitInfoArray = (items, profit, profitType) => {
+    return items.map((item) => {
+      const baseItem = {
+        price: makeNumber(item.price) || undefined,
+        quantity: makeInteger(item.quantity) || 1
+      };
+      
+      if (profit && profitType) {
+        baseItem.profit = profit;
+        baseItem.profitType = profitType;
+      }
+      
+      return baseItem;
+    });
+  };
+
+  const GA4ITEMS = [{ item_id: '1', price: 10.01, quantity: 3 }, { item_id: '2', price: 21.01 }, { item_id: '3', price: 50.3, quantity: 2 }];
+  const setGetEventData = (customGA4Items) => {
+    mock('getEventData', (key) => {
+      if (key !== 'items') return;
+      return customGA4Items || GA4ITEMS;
+    });
+  };
+
+  const expectedBigQuerySettings = {
+    logBigQueryProjectId: 'logBigQueryProjectId',
+    logBigQueryDatasetId: 'logBigQueryDatasetId',
+    logBigQueryTableId: 'logBigQueryTableId'
+  };
+
+  const requiredConsoleKeys = ['Type', 'TraceId', 'Name'];
+  const requiredBqKeys = ['timestamp', 'type', 'trace_id', 'tag_name'];
+  const expectedBqOptions = { ignoreUnknownValues: true };
+
+  const mockData = {
+    useOptimisticScenario: false,
+    adStorageConsent: 'optional',
+    logBigQueryProjectId: expectedBigQuerySettings.logBigQueryProjectId,
+    logBigQueryDatasetId: expectedBigQuerySettings.logBigQueryDatasetId,
+    logBigQueryTableId: expectedBigQuerySettings.logBigQueryTableId
+  };
+
+  const CUSTOMITEMS = [{ id: '1', p: 10.01, qtd: 3 }, { id: '2', p: 21.01 }, { id: '3', p: 50.3, qtd: 2 }];
+  const setAllMockData = (itemsSource, objToBeMerged) => {
+    const base = {
+      useItemPriceAsFallback: false,
+      useCache: false,
+      roundResult: false,
+      useDifferentStapeProductFeed: false,
+      logType: 'debug',
+      bigQueryLogType: 'no'
+    };
+    
+    const mockDataByItemArraySource = {
+      ga4: {
+        itemsSource: 'ga4',
+        ga4ItemIdKey: 'item_id',
+      },
+      custom: {
+        itemsSource: 'custom',
+        customItems: CUSTOMITEMS,
+        customItemIdKey: 'id',
+        customItemPriceKey: 'p',
+        customItemQuantityKey: 'qtd'
+      }
+    };
+    
+    return assign(JSON.parse(JSON.stringify(mockData)), base, mockDataByItemArraySource[itemsSource], objToBeMerged || {});
+  };
+
+  mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+    if (typeof callback === 'function') {
+      callback(200);
+    } else {
+      requestBody = requestOptions;
+      requestOptions = callback;
+      return Promise.create((resolve, reject) => {
+        resolve({ statusCode: 200 });
+      });  
+    }
+  });
+
+  mock('getRequestHeader', (header) => {
+    if (header === 'trace-id') return 'expectedTraceId';
+    else if (header === 'x-gtm-identifier') return 'expectedXGtmIdentifier';
+    else if (header === 'x-gtm-default-domain') return 'expectedXGtmDefaultDomain';
+    else if (header === 'x-gtm-api-key') return 'expectedXGtmApiKey';
+  });
+
+  const NOW = 1747945830456;
+  mock('getTimestampMillis', NOW);
+
+  const EXPECTED_REQUEST_BASE_URL = 'https://expectedXGtmIdentifier.expectedXGtmDefaultDomain/stape-api/expectedXGtmApiKey/v2/poas/feeds/default/products/';
+  const EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT = {
+    data: {
+      created_at: '2025-12-09T12:30:19.725535Z',
+      id: GA4ITEMS[0].item_id,
+      updated_at: '2025-12-09T12:30:19.725535Z',
+      value: 10,
+      value_type: 'percent'
+    },
+    success: true
+  };
+
+  const EXPECTED_CACHE_KEY = 'CivzT+aFuUBjEo6jvVPe1iJItRk8777gbgvtlhmHWfk='; // sha256Sync('https://expectedXGtmIdentifier.expectedXGtmDefaultDomain/stape-api/expectedXGtmApiKey/v2/poas/feeds/default/products/1');
+  const EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS = 180;
+  const EXPECTED_CACHE_OBJ = { 
+    profitInfo: { profit: EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT.data.value, profitType: EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT.data.value_type}, 
+    expiresAt: NOW + EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS * 60 * 1000 
+  };
+
+scenarios:
+  - name: 'Return undefined if no items array was found'
+    code: |-
+      [
+        {
+          itemsSource: 'ga4'
+        },
+        {
+          itemsSource: 'custom',
+          testMockData: { customItems: undefined }
+        }
+      ].forEach((scenario) => {
+        const copyMockData = setAllMockData(scenario.itemsSource, scenario.testMockData);
+        
+        let templateDataStorageGetItemCopyWasCalled = false;
+        let templateDataStorageSetItemCopyWasCalled = false;
+        mockObject('templateDataStorage', {
+          getItemCopy: (key) => { 
+            templateDataStorageGetItemCopyWasCalled = true;
+          },
+          setItemCopy: (key, value) => {
+            templateDataStorageSetItemCopyWasCalled = true;
+          }
+        });
+        
+        const variableResult = runCode(copyMockData);
+        
+        assertThat(templateDataStorageGetItemCopyWasCalled, 'Should not call templateDataStorage.getItemCopy.').isFalse();
+        assertThat(templateDataStorageSetItemCopyWasCalled, 'Should not call templateDataStorage.setItemCopy.').isFalse();
+        assertApi('sendHttpRequest').wasNotCalled();
+        assertThat(variableResult).isUndefined();
+      });
+
+  - name: '[Different Stape Product Feed] Request URL must be built using the provided Stape Container API Key'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        useDifferentStapeProductFeed: true,
+        stapeProductFeedContainerApiKey: 'abc:foobar:123123123abcfoobar:abc'
+      });
+
+      setGetEventData();
+
+      const EXPECTED_REQUEST_BASE_URL_DIFFERENT_STAPE_PRODUCT_FEED = 'https://foobar.abc.stape.abc/stape-api/123123123abcfoobar/v2/poas/feeds/default/products/';
+      const itemsProfitRequestUrls = GA4ITEMS.map(item => {
+        return EXPECTED_REQUEST_BASE_URL_DIFFERENT_STAPE_PRODUCT_FEED + item[copyMockData.ga4ItemIdKey];
+      });
+
+      let sendHttpRequestExecutions = 0;
+      mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+        assertThat(requestUrl).isEqualTo(itemsProfitRequestUrls[sendHttpRequestExecutions]);
+        assertThat(requestOptions).isEqualTo({
+          method: 'GET'
+        });
+        assertThat(requestBody).isUndefined();
+        sendHttpRequestExecutions++;
+        return Promise.create((resolve, reject) => {
+          resolve({ statusCode: 200 });
+        });
+      });
+
+      runCode(copyMockData);
+
+      callLater(() => assertThat(sendHttpRequestExecutions).isEqualTo(itemsProfitRequestUrls.length));
+
+  - name: '[Request] Items Profit Product Feed Requests are built and sent successfully'
+    code: |-
+      [
+        {
+          itemsSource: 'ga4',
+          testMock: () => { setGetEventData(); }
+        },
+        {
+          itemsSource: 'custom',
+        }
+      ].forEach((scenario) => {
+        
+        const copyMockData = setAllMockData(scenario.itemsSource, scenario.testMockData);
+        if (scenario.testMock) scenario.testMock();
+          
+        const isSourceGA4 = scenario.itemsSource === 'ga4';
+        const itemsProfitRequestUrls = (isSourceGA4 ? GA4ITEMS : CUSTOMITEMS).map(item => {
+          return EXPECTED_REQUEST_BASE_URL + item[isSourceGA4 ? copyMockData.ga4ItemIdKey : copyMockData.customItemIdKey];
+        });
+        let sendHttpRequestExecutions = 0;
+        mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+          assertThat(requestUrl).isEqualTo(itemsProfitRequestUrls[sendHttpRequestExecutions]);
+          assertThat(requestOptions).isEqualTo({
+            method: 'GET'
+          });
+          assertThat(requestBody).isUndefined();
+          sendHttpRequestExecutions++;
+          return Promise.create((resolve, reject) => {
+            resolve({ statusCode: 200 });
+          });
+        });
+        
+        runCode(copyMockData);
+        
+        callLater(() => assertThat(sendHttpRequestExecutions).isEqualTo(itemsProfitRequestUrls.length));
+      });
+
+  - name: '[Cache disabled] Cache is not being used, requests must always be made and cache must not be interacted with'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        useCache: false
+      });
+      setGetEventData();
+
+      let templateDataStorageGetItemCopyWasCalled = false;
+      let templateDataStorageSetItemCopyWasCalled = false;
+      mockObject('templateDataStorage', {
+        getItemCopy: (key) => { 
+          templateDataStorageGetItemCopyWasCalled = true;
+        },
+        setItemCopy: (key, value) => {
+          templateDataStorageSetItemCopyWasCalled = true;
+        }
+      });
+
+      runCode(copyMockData);
+
+      callLater(() => {
+        assertThat(templateDataStorageGetItemCopyWasCalled, 'Should not call templateDataStorage.getItemCopy.').isFalse();
+        assertThat(templateDataStorageSetItemCopyWasCalled, 'Should not call templateDataStorage.setItemCopy.').isFalse();
+        assertApi('sendHttpRequest').wasCalled();
+      });
+
+  - name: '[Cache enabled] Item Data in does not exist in cache, request must be made and cache must be updated'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        useCache: true,
+        cacheExpirationTime: EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS + ''
+      });
+      setGetEventData([GA4ITEMS[0]]);
+
+      let templateDataStorageGetItemCopyWasCalled = false;
+      let templateDataStorageSetItemCopyWasCalled = false;
+      mockObject('templateDataStorage', {
+        getItemCopy: (key) => {
+          templateDataStorageGetItemCopyWasCalled = true;
+          callLater(() => {
+            assertThat(key).isEqualTo(EXPECTED_CACHE_KEY);
+          });
+          return;
+        },
+        setItemCopy: (key, value) => {
+          templateDataStorageSetItemCopyWasCalled = true;
+          callLater(() => {
+            assertThat(key).isEqualTo(EXPECTED_CACHE_KEY);
+            assertThat(value).isEqualTo(EXPECTED_CACHE_OBJ);
+          });
+        }
+      });
+
+      mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+        return Promise.create((resolve) => {
+          resolve({ 
+            statusCode: 200, 
+            body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)
+          });
+        });
+      });
+
+      runCode(copyMockData);
+
+      callLater(() => {
+        assertThat(templateDataStorageGetItemCopyWasCalled, 'Should call templateDataStorage.getItemCopy.').isTrue();
+        assertThat(templateDataStorageSetItemCopyWasCalled, 'Should call templateDataStorage.setItemCopy.').isTrue();
+        assertApi('sendHttpRequest').wasCalled();
+      });
+
+  - name: '[Cache enabled] Item Data exists in cache but is expired, request must be made and cache must be updated'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        useCache: true,
+        cacheExpirationTime: EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS + ''
+      });
+      setGetEventData([GA4ITEMS[0]]);
+
+      let templateDataStorageGetItemCopyWasCalled = false;
+      let templateDataStorageSetItemCopyWasCalled = false;
+      mockObject('templateDataStorage', {
+        getItemCopy: (key) => {
+          templateDataStorageGetItemCopyWasCalled = true;
+          callLater(() => {
+            assertThat(key).isEqualTo(EXPECTED_CACHE_KEY);
+          });
+          return {
+            profitInfo: EXPECTED_CACHE_OBJ.profitInfo,
+            expiresAt: 1
+          };
+        },
+        setItemCopy: (key, value) => {
+          templateDataStorageSetItemCopyWasCalled = true;
+          callLater(() => {
+            assertThat(key).isEqualTo(EXPECTED_CACHE_KEY);
+            assertThat(value).isEqualTo(EXPECTED_CACHE_OBJ);
+          });
+        }
+      });
+
+      mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+        return Promise.create((resolve) => {
+          resolve({ 
+            statusCode: 200, 
+            body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)
+          });
+        });
+      });
+
+      runCode(copyMockData);
+
+      callLater(() => {
+        assertThat(templateDataStorageGetItemCopyWasCalled, 'Should call templateDataStorage.getItemCopy.').isTrue();
+        assertThat(templateDataStorageSetItemCopyWasCalled, 'Should call templateDataStorage.setItemCopy.').isTrue();
+        assertApi('sendHttpRequest').wasCalled();
+      });
+
+  - name: '[Cache enabled] Item Data exists in cache and is valid, request must not be made and cache must not be updated'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        useCache: true,
+        cacheExpirationTime: EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS + ''
+      });
+      setGetEventData([GA4ITEMS[0]]);
+
+      let templateDataStorageGetItemCopyWasCalled = false;
+      let templateDataStorageSetItemCopyWasCalled = false;
+      mockObject('templateDataStorage', {
+        getItemCopy: (key) => {
+          templateDataStorageGetItemCopyWasCalled = true;
+          callLater(() => {
+            assertThat(key).isEqualTo(EXPECTED_CACHE_KEY);
+          });
+          return EXPECTED_CACHE_OBJ;
+        },
+        setItemCopy: (key, value) => {
+          templateDataStorageSetItemCopyWasCalled = true;
+        }
+      });
+
+      runCode(copyMockData);
+
+      callLater(() => {
+        assertThat(templateDataStorageGetItemCopyWasCalled, 'Should call templateDataStorage.getItemCopy.').isTrue();
+        assertThat(templateDataStorageSetItemCopyWasCalled, 'Should not call templateDataStorage.setItemCopy.').isFalse();
+        assertApi('sendHttpRequest').wasNotCalled();
+      });
+
+  - name: '[Request] Items Profit Product Feed Requests are not succesful, only Item Price and Item Quantity should be passed to Promise All'
+    code: |-
+      setGetEventData([GA4ITEMS[0]]);
+
+      [
+        {
+          description: 'Items Profit Product Feed Requests returns something different than 200',
+          mock: (resolve, reject) => { resolve({ statusCode: 400 }); }
+        },
+        {
+          description: 'Items Profit Product Feed Requests returns 200 but body.success is not true',
+          mock: (resolve, reject) => { resolve({ statusCode: 200, body: JSON.stringify({ success: false }) }); }
+        },
+        {
+          description: 'Items Profit Product Feed Requests fails or times out',
+          mock: (resolve, reject) => { reject({ reason: 'timed out' }); }
+        }
+      ].forEach((scenario) => {
+        const copyMockData = setAllMockData('ga4');
+        
+        mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+          return Promise.create((resolve, reject) => {
+            scenario.mock(resolve, reject);
+          });
+        });
+        
+        mockObject('Promise', {
+          all: (promises) => {
+            return promises[0].then((baseItem) => {
+              callLater(() => assertThat(baseItem).isEqualTo({ price: GA4ITEMS[0].price, quantity: GA4ITEMS[0].quantity }) );
+              return [baseItem];
+            });
+          }
+        });
+        
+        runCode(copyMockData);
+      });
+
+  - name: '[Request] If an error happens when calculating profit, the variable must return undefined'
+    code: |-
+      const copyMockData = setAllMockData('ga4');
+      setGetEventData([GA4ITEMS[0]]);
+
+      mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+        return Promise.create((resolve) => {
+          resolve({ 
+            statusCode: 200, 
+            body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)
+          });
+        });
+      });
+
+      mockObject('Promise', {
+        all: (promises) => {
+          return promises[0].then((baseItem) => {
+            assertThat(baseItem).isEqualTo({ price: GA4ITEMS[0].price, quantity: GA4ITEMS[0].quantity });
+            return Promise.create((resolve, reject) => reject('Some error inside Promise.all().then(itemsWithProfitInfo)'));
+          });
+        }
+      });
+
+      runCode(copyMockData).then((variableResult) => {
+        assertThat(variableResult).isUndefined();
+      });
+
+  - name: '[Profit Calculation] Item does not have profit info and price is not used as fallback'
+    code: |-
+      setGetEventData();
+
+      [
+        {
+          description: 'Profit Value is Absolute',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, undefined, 'absolute')
+        },
+        {
+          description: 'Profit Value is Percent',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, undefined, 'percent')
+        },
+      ].forEach((scenario, index) => {
+        const copyMockData = setAllMockData('ga4', {
+          useItemPriceAsFallback: false
+        });
+        
+        mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+          return Promise.create((resolve) => {
+            resolve({ 
+              statusCode: 404,
+              body: JSON.stringify({ success: false })
+            });
+          });
+        });
+        
+        runCode(copyMockData).then((variableResult) => {
+          const expectedProfit = 0;
+          assertThat(variableResult).isEqualTo(expectedProfit);
+        });
+      });
+
+  - name: '[Profit Calculation] Item does not have profit info and price is used as fallback'
+    code: |-
+      const calculateExpectedProfit = (itemsWithProfitInfo) => {
+        return itemsWithProfitInfo.reduce((acc, item) => {
+          if (getType(item.price) === 'number') return acc + item.price * item.quantity;
+          return acc;
+        }, 0.0);
+      };
+
+      GA4ITEMS[0].price = GA4ITEMS[0].price + ''; // Checking if it successfully converts to Number.
+      GA4ITEMS[0].quantity = GA4ITEMS[0].quantity + ''; // Checking if it successfully converts to Number.
+
+      setGetEventData();
+
+      [
+        {
+          description: 'Profit Value is Absolute',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, undefined, 'absolute')
+        },
+        {
+          description: 'Profit Value is Percent',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, undefined, 'percent')
+        },
+      ].forEach((scenario, index) => {
+        const copyMockData = setAllMockData('ga4', {
+          useItemPriceAsFallback: true
+        });
+        
+        mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+          return Promise.create((resolve) => {
+            resolve({ 
+              statusCode: 404,
+              body: JSON.stringify({ success: false })
+            });
+          });
+        });
+        
+        runCode(copyMockData).then((variableResult) => {
+          const expectedProfit = calculateExpectedProfit(scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO);
+          assertThat(variableResult).isEqualTo(expectedProfit);
+        });
+      });
+
+  - name: '[Profit Calculation] item has profit info'
+    code: |-
+      const calculateExpectedProfit = (itemsWithProfitInfo) => {
+        return itemsWithProfitInfo.reduce((acc, item) => {
+          if (item.profitType === 'absolute') {
+            return acc + item.profit * item.quantity;
+          } else if (item.profitType === 'percent' && getType(item.price) === 'number') {
+            return acc + item.price * (item.profit / 100) * item.quantity;
+          }
+          return acc;
+        }, 0.0);
+      };
+
+      GA4ITEMS[0].price = GA4ITEMS[0].price + ''; // Checking if it successfully converts to Number.
+      GA4ITEMS[0].quantity = GA4ITEMS[0].quantity + ''; // Checking if it successfully converts to Number.
+
+      setGetEventData();
+
+      [
+        {
+          description: 'Profit Value is Absolute',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, 2, 'absolute')
+        },
+        {
+          description: 'Profit Value is Percentage',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, 10, 'percent')
+        },
+      ].forEach((scenario, index) => {
+        const copyMockData = setAllMockData('ga4', {
+          useItemPriceAsFallback: true
+        });
+        
+        mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+          return Promise.create((resolve) => {
+            resolve({ 
+              statusCode: 200,
+              body: JSON.stringify({ success: true, data: { value: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profit, value_type: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profitType } })
+            });
+          });
+        });
+        
+        runCode(copyMockData).then((variableResult) => {
+          const expectedProfit = calculateExpectedProfit(scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO);
+          assertThat(variableResult).isEqualTo(expectedProfit);
+        });
+      });
+
+  - name: '[Profit Calculation] Profit must be rounded'
+    code: |-
+      const calculateExpectedProfit = (itemsWithProfitInfo) => {
+        return itemsWithProfitInfo.reduce((acc, item) => {
+          if (item.profitType === 'absolute') {
+            return acc + item.profit * item.quantity;
+          } else if (item.profitType === 'percent' && getType(item.price) === 'number') {
+            return acc + item.price * (item.profit / 100) * item.quantity;
+          }
+          return acc;
+        }, 0.0);
+      };
+
+      GA4ITEMS[0].price = GA4ITEMS[0].price + ''; // Checking if it successfully converts to Number.
+      GA4ITEMS[0].quantity = GA4ITEMS[0].quantity + ''; // Checking if it successfully converts to Number.
+
+      setGetEventData();
+
+      [
+        {
+          description: 'Profit Value is Absolute',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, 2, 'absolute')
+        },
+        {
+          description: 'Profit Value is Percent',
+          EXPECTED_ITEMS_WITH_PROFIT_INFO: createMockItemsWithProfitInfoArray(GA4ITEMS, 10, 'percent')
+        },
+      ].forEach((scenario, index) => {
+        const copyMockData = setAllMockData('ga4', {
+          useItemPriceAsFallback: true,
+          roundResult: true
+        });
+        
+        mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
+          return Promise.create((resolve) => {
+            resolve({ 
+              statusCode: 200,
+              body: JSON.stringify({ success: true, data: { value: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profit, value_type: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profitType } })
+            });
+          });
+        });
+        
+        runCode(copyMockData).then((variableResult) => {
+          const expectedProfit = calculateExpectedProfit(scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO);
+          const expectedRoundedProfit = makeNumber(Math.round(expectedProfit * 100) / 100);
+          assertThat(variableResult).isEqualTo(expectedRoundedProfit);
+        });
+      });
+
+  - name: '[Custom Collection] Successful Profit Lookup (Percent)'
+    code: |-
+      const log = require('logToConsole');
+      const copyMockData = setAllMockData('ga4', {
+            useCustomStoreCollection: true,
+            containerApiKey: 'eu:test-id:test-api-key:io',
+            customCollectionName: 'marginCollection',
+            valueKey: 'margin',
+            valueTypeKey: 'marginType'
+          });
+      log(copyMockData);
+          setGetEventData([
+            { item_id: 'SKU-001', price: 200, quantity: 2 }
+          ]);
+
+          mock('sendHttpRequest', (requestUrl) => {
+            assertThat(requestUrl).contains('/store/collections/marginCollection/documents/SKU-001');
+            
+            const mockResponseBody = {
+              success: true,
+              data: {
+                data: { margin: 15, marginType: 'percent' }
+              }
+            };
+
+            return Promise.create((resolve) => resolve({ 
+              statusCode: 200, 
+              body: JSON.stringify(mockResponseBody) 
+            }));
+          });
+
+          runCode(copyMockData).then((profit) => {
+            // 200 (price) * 0.15 (15%) * 2 (quantity) = 60
+            assertThat(profit).isEqualTo(60);
+          });
+
+  - name: '[Custom Collection] Successful Profit Lookup (Absolute)'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+            useCustomStoreCollection: true,
+            containerApiKey: 'eu:test-id:test-api-key:io', // <-- Added missing required field
+            customCollectionName: 'wholesale_feed',
+            valueKey: 'abs_margin',
+            valueTypeKey: 'type_margin'
+          });
+
+          setGetEventData([
+            { item_id: 'SKU-002', price: 100, quantity: 3 }
+          ]);
+
+          mock('sendHttpRequest', (requestUrl) => {
+            assertThat(requestUrl).contains('/store/collections/wholesale_feed/documents/SKU-002');
+            
+            const mockResponseBody = {
+              success: true,
+              data: {
+                data: { abs_margin: 5.50, type_margin: 'absolute' }
+              }
+            };
+
+            return Promise.create((resolve) => resolve({ 
+              statusCode: 200, 
+              body: JSON.stringify(mockResponseBody) 
+            }));
+          });
+      runCode(copyMockData).then((profit) => {
+            // 5.50 (absolute margin) * 3 (quantity) = 16.50
+            assertThat(profit).isEqualTo(16.5);
+          });
