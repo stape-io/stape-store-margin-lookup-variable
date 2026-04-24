@@ -1341,4 +1341,6 @@ ___NOTES___
 
 Created on 17/09/2024, 11:34:39
 
-
+2026/04/24 - Change Notes:
+ - Add support to Stape Store collections
+ - Add tests

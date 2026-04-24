@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/stape-store-margin-lookup-variable'
 versions:
+  - sha: 0a31bf096427f5f6f4a9f7a4429c29e0b41bfb99
+    changeNotes: Add support to Stape Store Collections and add tests.
   - sha: 7ba0ba751aa3f3359128248813d5342ab51a59aa
     changeNotes: BREAKING CHANGES! REVIEW YOUR VARIABLE CAREFULLY AND UPDATE TO STAPE PRODUCT FEED. Added Stape Product Feed support.
   - sha: 18254a9ee08f350cad50257f08b83f929ef4c2d8
