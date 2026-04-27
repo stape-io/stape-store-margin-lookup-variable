@@ -1,20 +1,20 @@
-const sendHttpRequest = require('sendHttpRequest');
+const BigQuery = require('BigQuery');
 const encodeUriComponent = require('encodeUriComponent');
-const JSON = require('JSON');
-const templateDataStorage = require('templateDataStorage');
-const Promise = require('Promise');
-const sha256Sync = require('sha256Sync');
-const logToConsole = require('logToConsole');
-const getRequestHeader = require('getRequestHeader');
 const getContainerVersion = require('getContainerVersion');
 const getEventData = require('getEventData');
+const getRequestHeader = require('getRequestHeader');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
+const JSON = require('JSON');
+const logToConsole = require('logToConsole');
 const makeInteger = require('makeInteger');
 const makeNumber = require('makeNumber');
 const makeString = require('makeString');
 const Math = require('Math');
-const getTimestampMillis = require('getTimestampMillis');
-const getType = require('getType');
-const BigQuery = require('BigQuery');
+const Promise = require('Promise');
+const sendHttpRequest = require('sendHttpRequest');
+const sha256Sync = require('sha256Sync');
+const templateDataStorage = require('templateDataStorage');
 
 /*==============================================================================
 ==============================================================================*/
@@ -43,14 +43,15 @@ return profit;
 ==============================================================================*/
 
 function getStapeProductFeedItemUrl(baseUrl, itemId) {
-  return baseUrl + '/products/' + enc(itemId);
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
+  const innerPath = useStapeStore ? '/' : '/products/';
+  return baseUrl + innerPath + enc(itemId);
 }
 
 function getStapeProductFeedBaseUrl(data) {
   let containerIdentifier;
   let defaultDomain;
   let containerApiKey;
-  const feedPath = '/feeds/default';
 
   const shouldUseDifferentStore =
     isUIFieldTrue(data.useDifferentStapeProductFeed) &&
@@ -68,6 +69,11 @@ function getStapeProductFeedBaseUrl(data) {
     containerApiKey = getRequestHeader('x-gtm-api-key');
   }
 
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
+  const lookupPath = useStapeStore
+    ? 'store/collections/' + enc(data.stapeStoreCollectionName || 'default') + '/documents'
+    : 'poas/feeds/default';
+
   return (
     'https://' +
     enc(containerIdentifier) +
@@ -75,8 +81,8 @@ function getStapeProductFeedBaseUrl(data) {
     enc(defaultDomain) +
     '/stape-api/' +
     enc(containerApiKey) +
-    '/v2/poas' +
-    feedPath
+    '/v2/' +
+    lookupPath
   );
 }
 
@@ -85,6 +91,7 @@ function getRequestOptions() {
 }
 
 function getProfitforItems(data, items) {
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
   const useCache = data.useCache;
   const requestBaseUrl = getStapeProductFeedBaseUrl(data);
   const requestOptions = getRequestOptions();
@@ -98,6 +105,9 @@ function getProfitforItems(data, items) {
       price: makeNumber(item[itemPriceKey]) || undefined,
       quantity: makeInteger(item[itemQuantityKey]) || 1
     };
+    if (!itemId) {
+      return Promise.create((resolve) => resolve(baseItem));
+    }
 
     const requestUrl = getStapeProductFeedItemUrl(requestBaseUrl, itemId);
 
@@ -125,7 +135,7 @@ function getProfitforItems(data, items) {
       .then((result) => {
         log({
           Name: 'StapeProductFeed',
-          Type: 'result',
+          Type: 'Response',
           EventName: 'ReadItemProfit',
           ResponseStatusCode: result.statusCode,
           ResponseHeaders: result.headers,
@@ -135,9 +145,20 @@ function getProfitforItems(data, items) {
         const parsedBody = JSON.parse(result.body || '{}');
 
         if (result.statusCode === 200 && parsedBody.success) {
+          let profitValue;
+          let profitType;
+
+          if (useStapeStore && parsedBody.data.data) {
+            profitValue = parsedBody.data.data[data.stapeStoreValueKey || 'margin'];
+            profitType = parsedBody.data.data[data.stapeStoreValueTypeKey || 'value_type'];
+          } else if (!useStapeStore) {
+            profitValue = parsedBody.data.value;
+            profitType = parsedBody.data.value_type;
+          }
+
           const profitInfo = {
-            profit: makeNumber(parsedBody.data.value),
-            profitType: parsedBody.data.value_type
+            profit: makeNumber(profitValue),
+            profitType: profitType || 'absolute'
           };
 
           if (useCache) {
@@ -151,13 +172,13 @@ function getProfitforItems(data, items) {
         }
         return baseItem;
       })
-      .catch((result) => {
+      .catch((error) => {
         log({
           Name: 'StapeProductFeed',
           Type: 'Message',
           EventName: 'ReadItemProfit',
           Message: 'Request failed or timed out.',
-          Reason: JSON.stringify(result)
+          Reason: JSON.stringify(error)
         });
         return baseItem;
       });
