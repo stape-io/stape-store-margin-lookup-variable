@@ -28,12 +28,12 @@ setup: |-
         price: makeNumber(item.price) || undefined,
         quantity: makeInteger(item.quantity) || 1
       };
-      
+
       if (profit && profitType) {
         baseItem.profit = profit;
         baseItem.profitType = profitType;
       }
-      
+
       return baseItem;
     });
   };
@@ -74,7 +74,7 @@ setup: |-
       logType: 'debug',
       bigQueryLogType: 'no'
     };
-    
+
     const mockDataByItemArraySource = {
       ga4: {
         itemsSource: 'ga4',
@@ -88,7 +88,7 @@ setup: |-
         customItemQuantityKey: 'qtd'
       }
     };
-    
+
     return assign(JSON.parse(JSON.stringify(mockData)), base, mockDataByItemArraySource[itemsSource], objToBeMerged || {});
   };
 
@@ -100,7 +100,7 @@ setup: |-
       requestOptions = callback;
       return Promise.create((resolve, reject) => {
         resolve({ statusCode: 200 });
-      });  
+      });
     }
   });
 
@@ -128,9 +128,9 @@ setup: |-
 
   const EXPECTED_CACHE_KEY = 'CivzT+aFuUBjEo6jvVPe1iJItRk8777gbgvtlhmHWfk='; // sha256Sync('https://expectedXGtmIdentifier.expectedXGtmDefaultDomain/stape-api/expectedXGtmApiKey/v2/poas/feeds/default/products/1');
   const EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS = 180;
-  const EXPECTED_CACHE_OBJ = { 
-    profitInfo: { profit: EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT.data.value, profitType: EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT.data.value_type}, 
-    expiresAt: NOW + EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS * 60 * 1000 
+  const EXPECTED_CACHE_OBJ = {
+    profitInfo: { profit: EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT.data.value, profitType: EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT.data.value_type},
+    expiresAt: NOW + EXPECTED_CACHE_EXPIRATION_TIME_IN_SECONDS * 60 * 1000
   };
 
 scenarios:
@@ -146,20 +146,20 @@ scenarios:
         }
       ].forEach((scenario) => {
         const copyMockData = setAllMockData(scenario.itemsSource, scenario.testMockData);
-        
+
         let templateDataStorageGetItemCopyWasCalled = false;
         let templateDataStorageSetItemCopyWasCalled = false;
         mockObject('templateDataStorage', {
-          getItemCopy: (key) => { 
+          getItemCopy: (key) => {
             templateDataStorageGetItemCopyWasCalled = true;
           },
           setItemCopy: (key, value) => {
             templateDataStorageSetItemCopyWasCalled = true;
           }
         });
-        
+
         const variableResult = runCode(copyMockData);
-        
+
         assertThat(templateDataStorageGetItemCopyWasCalled, 'Should not call templateDataStorage.getItemCopy.').isFalse();
         assertThat(templateDataStorageSetItemCopyWasCalled, 'Should not call templateDataStorage.setItemCopy.').isFalse();
         assertApi('sendHttpRequest').wasNotCalled();
@@ -208,10 +208,10 @@ scenarios:
           itemsSource: 'custom',
         }
       ].forEach((scenario) => {
-        
+
         const copyMockData = setAllMockData(scenario.itemsSource, scenario.testMockData);
         if (scenario.testMock) scenario.testMock();
-          
+
         const isSourceGA4 = scenario.itemsSource === 'ga4';
         const itemsProfitRequestUrls = (isSourceGA4 ? GA4ITEMS : CUSTOMITEMS).map(item => {
           return EXPECTED_REQUEST_BASE_URL + item[isSourceGA4 ? copyMockData.ga4ItemIdKey : copyMockData.customItemIdKey];
@@ -228,9 +228,9 @@ scenarios:
             resolve({ statusCode: 200 });
           });
         });
-        
+
         runCode(copyMockData);
-        
+
         callLater(() => assertThat(sendHttpRequestExecutions).isEqualTo(itemsProfitRequestUrls.length));
       });
 
@@ -244,7 +244,7 @@ scenarios:
       let templateDataStorageGetItemCopyWasCalled = false;
       let templateDataStorageSetItemCopyWasCalled = false;
       mockObject('templateDataStorage', {
-        getItemCopy: (key) => { 
+        getItemCopy: (key) => {
           templateDataStorageGetItemCopyWasCalled = true;
         },
         setItemCopy: (key, value) => {
@@ -289,8 +289,8 @@ scenarios:
 
       mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
         return Promise.create((resolve) => {
-          resolve({ 
-            statusCode: 200, 
+          resolve({
+            statusCode: 200,
             body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)
           });
         });
@@ -336,8 +336,8 @@ scenarios:
 
       mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
         return Promise.create((resolve) => {
-          resolve({ 
-            statusCode: 200, 
+          resolve({
+            statusCode: 200,
             body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)
           });
         });
@@ -401,13 +401,13 @@ scenarios:
         }
       ].forEach((scenario) => {
         const copyMockData = setAllMockData('ga4');
-        
+
         mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
           return Promise.create((resolve, reject) => {
             scenario.mock(resolve, reject);
           });
         });
-        
+
         mockObject('Promise', {
           all: (promises) => {
             return promises[0].then((baseItem) => {
@@ -416,7 +416,7 @@ scenarios:
             });
           }
         });
-        
+
         runCode(copyMockData);
       });
 
@@ -427,8 +427,8 @@ scenarios:
 
       mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
         return Promise.create((resolve) => {
-          resolve({ 
-            statusCode: 200, 
+          resolve({
+            statusCode: 200,
             body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)
           });
         });
@@ -464,16 +464,16 @@ scenarios:
         const copyMockData = setAllMockData('ga4', {
           useItemPriceAsFallback: false
         });
-        
+
         mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
           return Promise.create((resolve) => {
-            resolve({ 
+            resolve({
               statusCode: 404,
               body: JSON.stringify({ success: false })
             });
           });
         });
-        
+
         runCode(copyMockData).then((variableResult) => {
           const expectedProfit = 0;
           assertThat(variableResult).isEqualTo(expectedProfit);
@@ -507,16 +507,16 @@ scenarios:
         const copyMockData = setAllMockData('ga4', {
           useItemPriceAsFallback: true
         });
-        
+
         mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
           return Promise.create((resolve) => {
-            resolve({ 
+            resolve({
               statusCode: 404,
               body: JSON.stringify({ success: false })
             });
           });
         });
-        
+
         runCode(copyMockData).then((variableResult) => {
           const expectedProfit = calculateExpectedProfit(scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO);
           assertThat(variableResult).isEqualTo(expectedProfit);
@@ -554,16 +554,16 @@ scenarios:
         const copyMockData = setAllMockData('ga4', {
           useItemPriceAsFallback: true
         });
-        
+
         mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
           return Promise.create((resolve) => {
-            resolve({ 
+            resolve({
               statusCode: 200,
               body: JSON.stringify({ success: true, data: { value: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profit, value_type: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profitType } })
             });
           });
         });
-        
+
         runCode(copyMockData).then((variableResult) => {
           const expectedProfit = calculateExpectedProfit(scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO);
           assertThat(variableResult).isEqualTo(expectedProfit);
@@ -602,16 +602,16 @@ scenarios:
           useItemPriceAsFallback: true,
           roundResult: true
         });
-        
+
         mock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {
           return Promise.create((resolve) => {
-            resolve({ 
+            resolve({
               statusCode: 200,
               body: JSON.stringify({ success: true, data: { value: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profit, value_type: scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO[index].profitType } })
             });
           });
         });
-        
+
         runCode(copyMockData).then((variableResult) => {
           const expectedProfit = calculateExpectedProfit(scenario.EXPECTED_ITEMS_WITH_PROFIT_INFO);
           const expectedRoundedProfit = makeNumber(Math.round(expectedProfit * 100) / 100);
@@ -621,70 +621,68 @@ scenarios:
 
   - name: '[Custom Collection] Successful Profit Lookup (Percent)'
     code: |-
-      const log = require('logToConsole');
       const copyMockData = setAllMockData('ga4', {
-            useCustomStoreCollection: true,
-            containerApiKey: 'eu:test-id:test-api-key:io',
-            customCollectionName: 'marginCollection',
-            valueKey: 'margin',
-            valueTypeKey: 'marginType'
-          });
-      log(copyMockData);
-          setGetEventData([
-            { item_id: 'SKU-001', price: 200, quantity: 2 }
-          ]);
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'marginCollection',
+        stapeStoreValueKey: 'margin',
+        stapeStoreValueTypeKey: 'marginType'
+      });
 
-          mock('sendHttpRequest', (requestUrl) => {
-            assertThat(requestUrl).contains('/store/collections/marginCollection/documents/SKU-001');
-            
-            const mockResponseBody = {
-              success: true,
-              data: {
-                data: { margin: 15, marginType: 'percent' }
-              }
-            };
+      setGetEventData([
+        { item_id: 'SKU-001', price: 200, quantity: 2 }
+      ]);
 
-            return Promise.create((resolve) => resolve({ 
-              statusCode: 200, 
-              body: JSON.stringify(mockResponseBody) 
-            }));
-          });
+      mock('sendHttpRequest', (requestUrl) => {
+        assertThat(requestUrl).contains('/store/collections/marginCollection/documents/SKU-001');
 
-          runCode(copyMockData).then((profit) => {
-            // 200 (price) * 0.15 (15%) * 2 (quantity) = 60
-            assertThat(profit).isEqualTo(60);
-          });
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { margin: 15, marginType: 'percent' }
+          }
+        };
+
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+        // 200 (price) * 0.15 (15%) * 2 (quantity) = 60
+        assertThat(profit).isEqualTo(60);
+      });
 
   - name: '[Custom Collection] Successful Profit Lookup (Absolute)'
     code: |-
       const copyMockData = setAllMockData('ga4', {
-            useCustomStoreCollection: true,
-            containerApiKey: 'eu:test-id:test-api-key:io', // <-- Added missing required field
-            customCollectionName: 'wholesale_feed',
-            valueKey: 'abs_margin',
-            valueTypeKey: 'type_margin'
-          });
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'abs_margin',
+        stapeStoreValueTypeKey: 'type_margin'
+      });
 
-          setGetEventData([
-            { item_id: 'SKU-002', price: 100, quantity: 3 }
-          ]);
+      setGetEventData([
+        { item_id: 'SKU-002', price: 100, quantity: 3 }
+      ]);
 
-          mock('sendHttpRequest', (requestUrl) => {
-            assertThat(requestUrl).contains('/store/collections/wholesale_feed/documents/SKU-002');
-            
-            const mockResponseBody = {
-              success: true,
-              data: {
-                data: { abs_margin: 5.50, type_margin: 'absolute' }
-              }
-            };
+      mock('sendHttpRequest', (requestUrl) => {
+        assertThat(requestUrl).contains('/store/collections/wholesale_feed/documents/SKU-002');
 
-            return Promise.create((resolve) => resolve({ 
-              statusCode: 200, 
-              body: JSON.stringify(mockResponseBody) 
-            }));
-          });
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { abs_margin: 5.50, type_margin: 'absolute' }
+          }
+        };
+
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
+        }));
+      });
+
       runCode(copyMockData).then((profit) => {
-            // 5.50 (absolute margin) * 3 (quantity) = 16.50
-            assertThat(profit).isEqualTo(16.5);
-          });
+        // 5.50 (absolute margin) * 3 (quantity) = 16.50
+        assertThat(profit).isEqualTo(16.5);
+      });

@@ -18,7 +18,7 @@ ___INFO___
     "UTILITY",
     "DATA_WAREHOUSING"
   ],
-  "description": "This variable allows you to retrieve margin data from the Stape Product Feed for each product in your items array and returns a combined margin value (accounting for quantity).",
+  "description": "This variable allows you to retrieve profit margin data from the Stape Product Feed for each product in your items array and returns a combined profit margin value (accounting for quantity).",
   "containerContexts": [
     "SERVER"
   ]
@@ -117,6 +117,123 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "GROUP",
+    "name": "productFeedSourceGroup",
+    "displayName": "Product Feed Source Settings",
+    "groupStyle": "ZIPPY_OPEN_ON_PARAM",
+    "subParams": [
+      {
+        "type": "SELECT",
+        "name": "productFeedSource",
+        "displayName": "Product Feed Source",
+        "macrosInSelect": false,
+        "selectItems": [
+          {
+            "value": "poas",
+            "displayValue": "POAS Data Feed"
+          },
+          {
+            "value": "stapeStore",
+            "displayValue": "Stape Store"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "poas",
+        "help": "By default this variable will lookup on \u003ci\u003ePOAS Data Feed\u003c/i\u003e Power Up database in your Stape account.\n\u003cbr/\u003e\nSelect \u003ci\u003eStape Store\u003c/i\u003e to lookup in a database from Stape Store.\n\u003cbr/\u003e\u003cbr/\u003e\nLearn more:\n\u003cbr/\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ca href\u003d\"https://stape.io/helpdesk/documentation/poas-data-feed-power-up\"\u003eHow to set up POAS Data Feed\u003c/a\u003e\u003c/li\u003e\n\u003cli\u003e\u003ca href\u003d\"https://github.com/stape-io/stape-store-margin-lookup-variable#how-to-configure-stape-store-as-a-product-feed-source\"\u003eHow to set up Stape Store Data Feed\u003c/a\u003e\u003c/li\u003e\n\u003c/ul\u003e"
+      },
+      {
+        "type": "GROUP",
+        "name": "stapeStoreSettingsGroup",
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "stapeStoreCollectionName",
+            "displayName": "Collection name",
+            "simpleValueType": true,
+            "help": "Enter your collection name as it shows on Stape Store. If left empty it will use the \u003cb\u003edefault\u003c/b\u003e collection.",
+            "defaultValue": "default",
+            "valueHint": "default"
+          },
+          {
+            "type": "TEXT",
+            "name": "stapeStoreValueKey",
+            "displayName": "Feed key for profit margin value",
+            "simpleValueType": true,
+            "defaultValue": "margin",
+            "help": "Enter the key from your feed that contains your stored item profit margin value.",
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ],
+            "valueHint": "margin"
+          },
+          {
+            "type": "TEXT",
+            "name": "stapeStoreValueTypeKey",
+            "displayName": "Feed key for profit margin value type",
+            "simpleValueType": true,
+            "help": "Enter the key from your feed that contains the type (\u003cb\u003eabsolute\u003c/b\u003e or \u003cb\u003epercentage\u003c/b\u003e) of the stored profit margin value:\n\u003cbr/\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cb\u003eabsolute\u003c/b\u003e: the stored profit margin value is the absolute profit margin value of the item.\u003c/li\u003e\n\u003cli\u003e\u003cb\u003epercentage\u003c/b\u003e: the stored profit margin value is the percentage of profit margin on the item price.\u003c/li\u003e\n\u003c/ul\u003e\n\u003cbr/\u003e\nif left blank or if the key is not found, \u003cb\u003eabsolute\u003c/b\u003e will be used as the profit margin type.",
+            "valueHint": "value_type"
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "productFeedSource",
+            "paramValue": "stapeStore",
+            "type": "EQUALS"
+          }
+        ]
+      },
+      {
+        "type": "SELECT",
+        "name": "useDifferentStapeProductFeed",
+        "displayName": "Use the database of a different container",
+        "macrosInSelect": true,
+        "selectItems": [
+          {
+            "value": true,
+            "displayValue": "true"
+          },
+          {
+            "value": false,
+            "displayValue": "false"
+          }
+        ],
+        "simpleValueType": true,
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "stapeProductFeedContainerApiKey",
+            "displayName": "Stape Container API Key",
+            "simpleValueType": true,
+            "valueHint": "euk:kzlfoobar:55ec021d429be49e64e691429cf0f27440a1b789kzlfoobar",
+            "help": "If you want to interact with the Stape POAS Data Feed or Stape Store of a different container hosted on Stape, specify the \u003cb\u003eContainer API Key\u003c/b\u003e of this container.\n\u003cbr/\u003e\u003cbr/\u003e\nTo find the \u003cb\u003eContainer API Key\u003c/b\u003e, go to the \u003ca href\u003d\"https://app.eu.stape.dev/container\"\u003eStape Admin panel\u003c/a\u003e, select the sGTM container which contains the Stape POAS Data Feed or Stape Store you want to interact with, go to the \u003ci\u003eSettings\u003c/i\u003e tab and scroll down to the \u003ci\u003eContainer settings\u003c/i\u003e section.",
+            "enablingConditions": [
+              {
+                "paramName": "useDifferentStapeProductFeed",
+                "paramValue": false,
+                "type": "NOT_EQUALS"
+              }
+            ],
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              },
+              {
+                "type": "REGEX",
+                "args": [
+                  "^[^:]+:[^:]+:[^:]+(:[^:]+)?$"
+                ]
+              }
+            ]
+          }
+        ],
+        "defaultValue": false
+      }
+    ]
+  },
+  {
+    "type": "GROUP",
     "name": "moreSettingsGroup",
     "displayName": "More Settings",
     "groupStyle": "ZIPPY_OPEN",
@@ -124,7 +241,7 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "CHECKBOX",
         "name": "useItemPriceAsFallback",
-        "checkboxText": "Use Item Price as fallback if the Item Margin is not found in the Stape Product Feed",
+        "checkboxText": "Use Item Price as fallback if the Item Margin is not found in the Product Feed",
         "simpleValueType": true,
         "help": "If enabled, the variable will use the Item Price as the Item Margin if the Margin is not found for the particular Item. Otherwise, it will consider the Item Margin as 0 (zero)."
       },
@@ -163,146 +280,6 @@ ___TEMPLATE_PARAMETERS___
         "name": "roundResult",
         "checkboxText": "Round result value to 2 decimal places",
         "simpleValueType": true
-      }
-    ]
-  },
-  {
-    "type": "GROUP",
-    "name": "stapeProductFeedSettingsGroup",
-    "displayName": "Stape Product Feed Settings",
-    "groupStyle": "ZIPPY_OPEN_ON_PARAM",
-    "subParams": [
-      {
-        "type": "SELECT",
-        "name": "useDifferentStapeProductFeed",
-        "displayName": "Use the Stape Product Feed database of a different container",
-        "macrosInSelect": true,
-        "selectItems": [
-          {
-            "value": true,
-            "displayValue": "true"
-          },
-          {
-            "value": false,
-            "displayValue": "false"
-          }
-        ],
-        "simpleValueType": true,
-        "subParams": [
-          {
-            "type": "TEXT",
-            "name": "stapeProductFeedContainerApiKey",
-            "displayName": "Stape Container API Key",
-            "simpleValueType": true,
-            "valueHint": "euk:kzlfoobar:55ec021d429be49e64e691429cf0f27440a1b789kzlfoobar",
-            "help": "If you want to interact with the Stape Product Feed of a different container hosted on Stape, specify the \u003cb\u003eContainer API Key\u003c/b\u003e of this container.\n\u003cbr/\u003e\u003cbr/\u003e\nTo find the \u003cb\u003eContainer API Key\u003c/b\u003e, go to the \u003ca href\u003d\"https://app.eu.stape.dev/container\"\u003eStape Admin panel\u003c/a\u003e, select the sGTM container which contains the Stape Product Feed you want to interact with, go to the \u003ci\u003eSettings\u003c/i\u003e tab and scroll down to the \u003ci\u003eContainer settings\u003c/i\u003e section.",
-            "enablingConditions": [
-              {
-                "paramName": "useDifferentStapeProductFeed",
-                "paramValue": false,
-                "type": "NOT_EQUALS"
-              }
-            ],
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              },
-              {
-                "type": "REGEX",
-                "args": [
-                  "^[^:]+:[^:]+:[^:]+(:[^:]+)?$"
-                ]
-              }
-            ]
-          }
-        ],
-        "defaultValue": false
-      },
-      {
-        "type": "CHECKBOX",
-        "name": "useCustomStoreCollection",
-        "checkboxText": "Use a Stape Store custom collection",
-        "simpleValueType": true,
-        "help": "By default this variable will lookup on POAS Data Feed Power Up database in your Stape account. Check this box to lookup in a different, custom collection from Stape Store.",
-        "defaultValue": false,
-        "subParams": [
-          {
-            "type": "TEXT",
-            "name": "containerApiKey",
-            "displayName": "Container API Key",
-            "simpleValueType": true,
-            "help": "Your Stape container API Key. It can be found on your Stape container overview under \u003cb\u003eSettings\u003c/b\u003e.",
-            "enablingConditions": [
-              {
-                "paramName": "useCustomStoreCollection",
-                "paramValue": true,
-                "type": "EQUALS"
-              }
-            ],
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ],
-            "valueHint": "euk:kzlfoobar:55ec021d429be49e64e691429cf0f27440a1b789kzlfoobar"
-          },
-          {
-            "type": "TEXT",
-            "name": "customCollectionName",
-            "displayName": "Custom collection name",
-            "simpleValueType": true,
-            "enablingConditions": [
-              {
-                "paramName": "useCustomStoreCollection",
-                "paramValue": true,
-                "type": "EQUALS"
-              }
-            ],
-            "help": "Enter your feed collection name as it shows on Stape Store. If left empty it will use the \u003cb\u003edefault\u003c/b\u003e collection.",
-            "defaultValue": "default",
-            "valueHint": "default"
-          },
-          {
-            "type": "TEXT",
-            "name": "valueKey",
-            "displayName": "Feed key for profit margin",
-            "simpleValueType": true,
-            "enablingConditions": [
-              {
-                "paramName": "useCustomStoreCollection",
-                "paramValue": true,
-                "type": "EQUALS"
-              }
-            ],
-            "defaultValue": "price",
-            "help": "Enter the key from your feed that represents your item  profit margin.",
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ]
-          },
-          {
-            "type": "TEXT",
-            "name": "valueTypeKey",
-            "displayName": "Feed key for value type",
-            "simpleValueType": true,
-            "enablingConditions": [
-              {
-                "paramName": "useCustomStoreCollection",
-                "paramValue": true,
-                "type": "EQUALS"
-              }
-            ],
-            "help": "Enter the key from your feed that represents the type of profit value: \u003cb\u003eabsolute\u003c/b\u003e or \u003cb\u003epercent\u003c/b\u003e.",
-            "defaultValue": "value_type",
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ]
-          }
-        ]
       }
     ]
   },
@@ -452,26 +429,21 @@ return profit;
 ==============================================================================*/
 
 function getStapeProductFeedItemUrl(baseUrl, itemId) {
-  const innerPath = data.useCustomStoreCollection ? '' : '/products/';
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
+  const innerPath = useStapeStore ? '/' : '/products/';
   return baseUrl + innerPath + enc(itemId);
 }
 
 function getStapeProductFeedBaseUrl(data) {
-  const customCollectionName = data.customCollectionName;
-  const poasFeedPath = 'poas/feeds/default';
-  const collectionFeedPath = 'collections/' + enc(customCollectionName) + '/documents/';
   let containerIdentifier;
   let defaultDomain;
-  let containerApiKey = data.stapeProductFeedContainerApiKey || data.containerApiKey;
+  let containerApiKey;
 
   const shouldUseDifferentStore =
-    isUIFieldTrue(data.useDifferentStapeProductFeed) && getType(containerApiKey) === 'string';
-
-  const shouldUseCustomCollection =
-    data.useCustomStoreCollection && getType(containerApiKey) === 'string';
-
-  if (shouldUseDifferentStore || shouldUseCustomCollection) {
-    const containerApiKeyParts = containerApiKey.split(':');
+    isUIFieldTrue(data.useDifferentStapeProductFeed) &&
+    getType(data.stapeProductFeedContainerApiKey) === 'string';
+  if (shouldUseDifferentStore) {
+    const containerApiKeyParts = data.stapeProductFeedContainerApiKey.split(':');
     const containerLocation = containerApiKeyParts[0];
     const containerRegion = containerApiKeyParts[3] || 'io';
     containerIdentifier = containerApiKeyParts[1];
@@ -483,7 +455,10 @@ function getStapeProductFeedBaseUrl(data) {
     containerApiKey = getRequestHeader('x-gtm-api-key');
   }
 
-  const lookupPath = shouldUseCustomCollection ? 'store/' + collectionFeedPath : poasFeedPath;
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
+  const lookupPath = useStapeStore
+    ? 'store/collections/' + enc(data.stapeStoreCollectionName || 'default') + '/documents'
+    : 'poas/feeds/default';
 
   return (
     'https://' +
@@ -502,6 +477,7 @@ function getRequestOptions() {
 }
 
 function getProfitforItems(data, items) {
+  const useStapeStore = data.productFeedSource === 'stapeStore'; // To avoid a breaking change.
   const useCache = data.useCache;
   const requestBaseUrl = getStapeProductFeedBaseUrl(data);
   const requestOptions = getRequestOptions();
@@ -509,26 +485,12 @@ function getProfitforItems(data, items) {
   const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
   const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
 
-  const feedItemPriceKey = data.useCustomStoreCollection && data.valueKey;
-  const feedItemValueTypeKey = data.useCustomStoreCollection && data.valueTypeKey;
-
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
-
-    let rawPrice = item[itemPriceKey];
-    let rawQty = item[itemQuantityKey];
-
-    let parsedPrice = makeNumber(rawPrice);
-    let parsedQty = makeInteger(rawQty);
-
     const baseItem = {
-      price: rawPrice !== undefined && parsedPrice === 0 ? 0 : parsedPrice || undefined,
-      quantity:
-        rawQty !== undefined && getType(parsedQty) === 'number' && parsedQty === parsedQty
-          ? parsedQty
-          : 1
+      price: makeNumber(item[itemPriceKey]) || undefined,
+      quantity: makeInteger(item[itemQuantityKey]) || 1
     };
-
     if (!itemId) {
       return Promise.create((resolve) => resolve(baseItem));
     }
@@ -572,10 +534,10 @@ function getProfitforItems(data, items) {
           let profitValue;
           let profitType;
 
-          if (data.useCustomStoreCollection && parsedBody.data.data) {
-            profitValue = parsedBody.data.data[feedItemPriceKey];
-            profitType = parsedBody.data.data[feedItemValueTypeKey];
-          } else {
+          if (useStapeStore && parsedBody.data.data) {
+            profitValue = parsedBody.data.data[data.stapeStoreValueKey || 'margin'];
+            profitType = parsedBody.data.data[data.stapeStoreValueTypeKey || 'value_type'];
+          } else if (!useStapeStore) {
             profitValue = parsedBody.data.value;
             profitType = parsedBody.data.value_type;
           }
@@ -1256,31 +1218,27 @@ scenarios:
     \ / 100);\n    assertThat(variableResult).isEqualTo(expectedRoundedProfit);\n\
     \  });\n});"
 - name: '[Custom Collection] Successful Profit Lookup (Percent)'
-  code: "const log = require('logToConsole');\nconst copyMockData = setAllMockData('ga4',\
-    \ {\n      useCustomStoreCollection: true,\n      containerApiKey: 'eu:test-id:test-api-key:io',\n\
-    \      customCollectionName: 'marginCollection',\n      valueKey: 'margin',\n\
-    \      valueTypeKey: 'marginType'\n    });\nlog(copyMockData);\n    setGetEventData([\n\
-    \      { item_id: 'SKU-001', price: 200, quantity: 2 }\n    ]);\n\n    mock('sendHttpRequest',\
-    \ (requestUrl) => {\n      assertThat(requestUrl).contains('/store/collections/marginCollection/documents/SKU-001');\n\
-    \      \n      const mockResponseBody = {\n        success: true,\n        data:\
-    \ {\n          data: { margin: 15, marginType: 'percent' }\n        }\n      };\n\
-    \n      return Promise.create((resolve) => resolve({ \n        statusCode: 200,\
-    \ \n        body: JSON.stringify(mockResponseBody) \n      }));\n    });\n\n \
-    \   runCode(copyMockData).then((profit) => {\n      // 200 (price) * 0.15 (15%)\
-    \ * 2 (quantity) = 60\n      assertThat(profit).isEqualTo(60);\n    });"
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'marginCollection',\n  stapeStoreValueKey: 'margin',\n\
+    \  stapeStoreValueTypeKey: 'marginType'\n});\n\nsetGetEventData([\n  { item_id:\
+    \ 'SKU-001', price: 200, quantity: 2 }\n]);\n\nmock('sendHttpRequest', (requestUrl)\
+    \ => {\n  assertThat(requestUrl).contains('/store/collections/marginCollection/documents/SKU-001');\n\
+    \  \n  const mockResponseBody = {\n    success: true,\n    data: {\n      data:\
+    \ { margin: 15, marginType: 'percent' }\n    }\n  };\n\n  return Promise.create((resolve)\
+    \ => resolve({ \n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
+    \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  // 200 (price)\
+    \ * 0.15 (15%) * 2 (quantity) = 60\n  assertThat(profit).isEqualTo(60);\n});"
 - name: '[Custom Collection] Successful Profit Lookup (Absolute)'
-  code: "const copyMockData = setAllMockData('ga4', {\n      useCustomStoreCollection:\
-    \ true,\n      containerApiKey: 'eu:test-id:test-api-key:io', // <-- Added missing\
-    \ required field\n      customCollectionName: 'wholesale_feed',\n      valueKey:\
-    \ 'abs_margin',\n      valueTypeKey: 'type_margin'\n    });\n\n    setGetEventData([\n\
-    \      { item_id: 'SKU-002', price: 100, quantity: 3 }\n    ]);\n\n    mock('sendHttpRequest',\
-    \ (requestUrl) => {\n      assertThat(requestUrl).contains('/store/collections/wholesale_feed/documents/SKU-002');\n\
-    \      \n      const mockResponseBody = {\n        success: true,\n        data:\
-    \ {\n          data: { abs_margin: 5.50, type_margin: 'absolute' }\n        }\n\
-    \      };\n\n      return Promise.create((resolve) => resolve({ \n        statusCode:\
-    \ 200, \n        body: JSON.stringify(mockResponseBody) \n      }));\n    });\n\
-    runCode(copyMockData).then((profit) => {\n      // 5.50 (absolute margin) * 3\
-    \ (quantity) = 16.50\n      assertThat(profit).isEqualTo(16.5);\n    });"
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'abs_margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin'\n});\n\nsetGetEventData([\n  { item_id:\
+    \ 'SKU-002', price: 100, quantity: 3 }\n]);\n\nmock('sendHttpRequest', (requestUrl)\
+    \ => {\n  assertThat(requestUrl).contains('/store/collections/wholesale_feed/documents/SKU-002');\n\
+    \  \n  const mockResponseBody = {\n    success: true,\n    data: {\n      data:\
+    \ { abs_margin: 5.50, type_margin: 'absolute' }\n    }\n  };\n\n  return Promise.create((resolve)\
+    \ => resolve({ \n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
+    \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  // 5.50 (absolute\
+    \ margin) * 3 (quantity) = 16.50\n  assertThat(profit).isEqualTo(16.5);\n});"
 setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\nconst\
   \ parseUrl = require('parseUrl');\nconst Object = require('Object');\nconst makeInteger\
   \ = require('makeInteger');\nconst makeNumber = require('makeNumber');\nconst toBase64\
@@ -1344,3 +1302,4 @@ Created on 17/09/2024, 11:34:39
 2026/04/24 - Change Notes:
  - Add support to Stape Store collections
  - Add tests
+
