@@ -20,3 +20,6 @@ Product data can be uploaded to Stape Store via the [REST API](https://api.store
 ## Open Source
 
 The **Stape Store Margin Lookup Variable for GTM Server Side** is developed and maintained by the [Stape Team](https://stape.io/) under the Apache 2.0 license.
+
+### GTM Gallery Status
+🟢 [Listed](https://tagmanager.google.com/gallery/#/owners/stape-io/templates/stape-store-margin-lookup-variable)
