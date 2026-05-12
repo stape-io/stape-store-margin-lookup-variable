@@ -686,3 +686,217 @@ scenarios:
         // 5.50 (absolute margin) * 3 (quantity) = 16.50
         assertThat(profit).isEqualTo(16.5);
       });
+
+  - name: '[Discount] Default Behavior if Discount Feature is disabled'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'abs_margin',
+        stapeStoreValueTypeKey: 'type_margin',
+      });
+
+      setGetEventData();
+
+
+      mock('sendHttpRequest', (requestUrl) => {
+
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { abs_margin: 5.50, type_margin: 'absolute' }
+          }
+        };
+
+        return Promise.create((resolve) => resolve({ 
+          statusCode: 200, 
+          body: JSON.stringify(mockResponseBody) 
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+      assertThat(profit).isEqualTo(33);
+      });
+
+  - name: '[Discount] Successfuly calculate profit with absolute discount'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'abs_margin',
+        stapeStoreValueTypeKey: 'type_margin',
+        useDiscount: true,
+        discountType: 'item',
+        discountKey: 'discount',
+        discountFormula: 'discountOverItemPrice'
+      });
+
+      setGetEventData();
+
+      mock('sendHttpRequest', (requestUrl) => {
+
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { abs_margin: 5.50, type_margin: 'absolute' }
+          }
+        };
+
+        return Promise.create((resolve) => resolve({ 
+          statusCode: 200, 
+          body: JSON.stringify(mockResponseBody) 
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+      assertThat(profit).isEqualTo(11);
+      });
+
+  - name: '[Discount] Successfuly calculate profit with percent discount deducted from item price'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'margin',
+        stapeStoreValueTypeKey: 'type_margin',
+        useDiscount: true,
+        discountType: 'item',
+        discountKey: 'discount',
+        discountFormula: 'discountOverItemPrice',
+        roundResult: true
+
+      });
+
+      setGetEventData();
+
+      mock('sendHttpRequest', (requestUrl) => {
+
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { margin: 30, type_margin: 'percent' }
+          }
+        };
+
+        return Promise.create((resolve) => resolve({ 
+          statusCode: 200, 
+          body: JSON.stringify(mockResponseBody) 
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+      assertThat(profit).isEqualTo(38.89);
+      });
+
+  - name: '[Discount] Successfuly calculate profit with percent discount deducted from item profit'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'margin',
+        stapeStoreValueTypeKey: 'type_margin',
+        useDiscount: true,
+        discountType: 'item',
+        discountKey: 'discount',
+        discountFormula: 'discountOverItemProfit',
+        roundResult: true
+
+      });
+
+      setGetEventData();
+
+      mock('sendHttpRequest', (requestUrl) => {
+
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { margin: 30, type_margin: 'percent' }
+          }
+        };
+
+        return Promise.create((resolve) => resolve({ 
+          statusCode: 200, 
+          body: JSON.stringify(mockResponseBody) 
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+      assertThat(profit).isEqualTo(23.49);
+      });
+
+  - name: '[Discount] Successfully calculate profit with order-level discount'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'margin',
+        stapeStoreValueTypeKey: 'type_margin',
+        useDiscount: true,
+        discountType: 'order',
+        discountKey: 'order_discount'
+      });
+
+      mock('getEventData', (key) => {
+        if (key === 'items') {
+          return [{ item_id: 'SKU-001', price: 100, quantity: 2 }];
+        }
+        if (key === 'order_discount') return 10;
+        return undefined;
+      });
+
+      mock('sendHttpRequest', (requestUrl) => {
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { margin: 20, type_margin: 'percent' }
+          }
+        };
+        return Promise.create((resolve) => resolve({ 
+          statusCode: 200, 
+          body: JSON.stringify(mockResponseBody) 
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+        // Profit: (100 * 0.20 * 2) = 40. Then Order Discount: 40 - 10 = 30.
+        assertThat(profit).isEqualTo(30);
+      });
+
+  - name: '[Discount] Successfully falls back to GA4 discount key if discountKey is left empty'
+    code: |-
+      const copyMockData = setAllMockData('ga4', {
+        productFeedSource: 'stapeStore',
+        stapeStoreCollectionName: 'wholesale_feed',
+        stapeStoreValueKey: 'margin',
+        stapeStoreValueTypeKey: 'type_margin',
+        useDiscount: true,
+        discountType: 'item',
+        discountKey: '', // Intentionally left empty
+        discountFormula: 'discountOverItemPrice'
+      });
+
+      setGetEventData([
+       { item_id: 'SKU-001', 
+        price: 100, 
+        quantity: 1, 
+        discount: 15 
+       }
+      ]);
+
+      mock('sendHttpRequest', (requestUrl) => {
+        const mockResponseBody = {
+          success: true,
+          data: {
+            data: { margin: 50, type_margin: 'percent' }
+          }
+        };
+        return Promise.create((resolve) => resolve({ 
+          statusCode: 200, 
+          body: JSON.stringify(mockResponseBody) 
+        }));
+      });
+
+      runCode(copyMockData).then((profit) => {
+        // 100 (price) - 15 (discount) * 0.50 margin * 1 qty = 42.50
+        assertThat(profit).isEqualTo(42.5);
+      });
