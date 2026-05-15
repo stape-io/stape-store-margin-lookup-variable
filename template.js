@@ -98,12 +98,14 @@ function getProfitforItems(data, items) {
   const itemIdKey = data.itemsSource === 'ga4' ? data.ga4ItemIdKey : data.customItemIdKey;
   const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
   const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
+  const discountKey = data.discountKey || 'discount';
 
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
     const baseItem = {
       price: makeNumber(item[itemPriceKey]) || undefined,
-      quantity: makeInteger(item[itemQuantityKey]) || 1
+      quantity: makeInteger(item[itemQuantityKey]) || 1,
+      discount: data.useDiscount ? makeNumber(item[discountKey]) || 0 : 0
     };
     if (!itemId) {
       return Promise.create((resolve) => resolve(baseItem));
@@ -188,21 +190,50 @@ function getProfitforItems(data, items) {
 }
 
 function calculateProfit(itemsWithProfitInfo) {
-  const profit = itemsWithProfitInfo.reduce((acc, item) => {
+  const useDiscount = data.useDiscount;
+
+  const useItemLevelDiscount = useDiscount && data.discountType === 'item';
+  let profit = itemsWithProfitInfo.reduce((acc, item) => {
+    const itemDiscount = useItemLevelDiscount ? item.discount : 0;
     if (getType(item.profit) === 'number') {
       if (item.profitType === 'absolute') {
-        return acc + item.profit * item.quantity;
+        return acc + (item.profit - itemDiscount) * item.quantity;
       } else if (item.profitType === 'percent' && getType(item.price) === 'number') {
-        return acc + item.price * (item.profit / 100) * item.quantity;
+        return (
+          acc +
+          profitMarginCalculatorPerItem(
+            data.discountFormula,
+            item.price,
+            itemDiscount,
+            item.profit,
+            item.quantity
+          )
+        );
       }
     } else if (data.useItemPriceAsFallback && getType(item.price) === 'number') {
-      return acc + item.price * item.quantity;
+      return acc + (item.price - itemDiscount) * item.quantity;
     }
     return acc;
   }, 0.0);
 
+  const useOrderLevelDiscount = useDiscount && data.discountType === 'order';
+  if (useOrderLevelDiscount && !useItemLevelDiscount) {
+    const discountKey = data.discountKey || 'discount';
+    const orderDiscount = makeNumber(getEventData(discountKey)) || 0;
+    profit = profit - orderDiscount;
+  }
+
   if (data.roundResult) return makeNumber(Math.round(profit * 100) / 100);
   return profit;
+}
+
+function profitMarginCalculatorPerItem(formula, price, discount, margin, quantity) {
+  if (formula === 'discountOverItemPrice') {
+    return (price - discount) * (margin / 100) * quantity;
+  } else if (formula === 'discountOverItemProfit') {
+    return (price * (margin / 100) - discount) * quantity;
+  }
+  return price * (margin / 100) * quantity;
 }
 
 /*==============================================================================

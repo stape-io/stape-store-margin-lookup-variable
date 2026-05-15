@@ -18,7 +18,7 @@ ___INFO___
     "UTILITY",
     "DATA_WAREHOUSING"
   ],
-  "description": "This variable allows you to retrieve profit margin data from the Stape Product Feed for each product in your items array and returns a combined profit margin value (accounting for quantity).",
+  "description": "This variable allows you to retrieve profit margin data from the Product Feed for each product in your items array and returns a combined profit margin value (accounting for quantity).",
   "containerContexts": [
     "SERVER"
   ]
@@ -240,13 +240,6 @@ ___TEMPLATE_PARAMETERS___
     "subParams": [
       {
         "type": "CHECKBOX",
-        "name": "useItemPriceAsFallback",
-        "checkboxText": "Use Item Price as fallback if the Item Margin is not found in the Product Feed",
-        "simpleValueType": true,
-        "help": "If enabled, the variable will use the Item Price as the Item Margin if the Margin is not found for the particular Item. Otherwise, it will consider the Item Margin as 0 (zero)."
-      },
-      {
-        "type": "CHECKBOX",
         "name": "useCache",
         "checkboxText": "Store each Item Margin in cache",
         "simpleValueType": true,
@@ -274,6 +267,84 @@ ___TEMPLATE_PARAMETERS___
             "valueUnit": "minutes"
           }
         ]
+      },
+      {
+        "type": "CHECKBOX",
+        "name": "useItemPriceAsFallback",
+        "checkboxText": "Use Item Price as fallback if the Item Margin is not found in the Product Feed",
+        "simpleValueType": true,
+        "help": "If enabled, the variable will use the Item Price as the Item Margin if the Margin is not found for the particular Item. Otherwise, it will consider the Item Margin as 0 (zero)."
+      },
+      {
+        "type": "CHECKBOX",
+        "name": "useDiscount",
+        "checkboxText": "Calculate Profit Margin considering discounts",
+        "simpleValueType": true,
+        "subParams": [
+          {
+            "type": "RADIO",
+            "name": "discountType",
+            "radioItems": [
+              {
+                "value": "item",
+                "displayValue": "Item-level discount",
+                "subParams": [
+                  {
+                    "type": "SELECT",
+                    "name": "discountFormula",
+                    "selectItems": [
+                      {
+                        "value": "discountOverItemPrice",
+                        "displayValue": "Discount over Item Price"
+                      },
+                      {
+                        "value": "discountOverItemProfit",
+                        "displayValue": "Discount over Item Profit"
+                      }
+                    ],
+                    "simpleValueType": true,
+                    "defaultValue": "discountOverItemPrice"
+                  }
+                ],
+                "help": "Choose how the discount will be applied. \n\u003cbr/\u003e\n❗ This is only applicable when the type of the stored profit margin value is a \u003cb\u003epercentage\u003c/b\u003e. When it\u0027s an absolute value, it will always be a Discount over Item Profit.\n\u003c/br\u003e\u003c/br\u003e\n\u003cul\u003e \n\u003cli\u003e\u003cb\u003eOver Item Price:\u003c/b\u003e The profit will be calculated after discount is deducted from the full item price.\u003c/li\u003e \n\u003cli\u003e\u003cb\u003eOver Item Profit:\u003c/b\u003e The discount will be deducted from item profit (after margin is applied).\u003c/li\u003e\n\u003c/ul\u003e\n\u003c/br\u003e\n⚠️ Choosing the wrong discount type will directly affect the profit calculation leading to data inconsistency."
+              },
+              {
+                "value": "order",
+                "displayValue": "Order-level discount"
+              }
+            ],
+            "simpleValueType": true,
+            "enablingConditions": [
+              {
+                "paramName": "useDiscount",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "defaultValue": "order"
+          },
+          {
+            "type": "TEXT",
+            "name": "discountKey",
+            "displayName": "Discount Key",
+            "simpleValueType": true,
+            "enablingConditions": [
+              {
+                "paramName": "useDiscount",
+                "paramValue": true,
+                "type": "EQUALS"
+              }
+            ],
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ],
+            "help": "Input the discount key to lookup. Take caution as this must match your choice for item-level or order-level discount.\u003c/br\u003e\nIf \u003cb\u003eitem-level\u003c/b\u003e is chosen, this key must match one inside the item object. \u003c/br\u003e\nIf \u003cb\u003eorder-level\u003c/b\u003e is chosen, this key must match one for the whole purchase event in Event Data.\u003c/br\u003e\nLeave this untouched if you want to use GA4 Event Data schema.",
+            "defaultValue": "discount"
+          }
+        ],
+        "help": "\u003cb\u003eDo not\u003c/b\u003e use this feature if the Item Price is already discounted, otherwise the discount will be applied twice and your profit will be wrongfully calculated."
       },
       {
         "type": "CHECKBOX",
@@ -484,12 +555,14 @@ function getProfitforItems(data, items) {
   const itemIdKey = data.itemsSource === 'ga4' ? data.ga4ItemIdKey : data.customItemIdKey;
   const itemPriceKey = data.itemsSource === 'custom' ? data.customItemPriceKey : 'price';
   const itemQuantityKey = data.itemsSource === 'custom' ? data.customItemQuantityKey : 'quantity';
+  const discountKey = data.discountKey || 'discount';
 
   const responsePromises = items.map((item) => {
     const itemId = item[itemIdKey];
     const baseItem = {
       price: makeNumber(item[itemPriceKey]) || undefined,
-      quantity: makeInteger(item[itemQuantityKey]) || 1
+      quantity: makeInteger(item[itemQuantityKey]) || 1,
+      discount: data.useDiscount ? makeNumber(item[discountKey]) || 0 : 0
     };
     if (!itemId) {
       return Promise.create((resolve) => resolve(baseItem));
@@ -574,21 +647,50 @@ function getProfitforItems(data, items) {
 }
 
 function calculateProfit(itemsWithProfitInfo) {
-  const profit = itemsWithProfitInfo.reduce((acc, item) => {
+  const useDiscount = data.useDiscount;
+
+  const useItemLevelDiscount = useDiscount && data.discountType === 'item';
+  let profit = itemsWithProfitInfo.reduce((acc, item) => {
+    const itemDiscount = useItemLevelDiscount ? item.discount : 0;
     if (getType(item.profit) === 'number') {
       if (item.profitType === 'absolute') {
-        return acc + item.profit * item.quantity;
+        return acc + (item.profit - itemDiscount) * item.quantity;
       } else if (item.profitType === 'percent' && getType(item.price) === 'number') {
-        return acc + item.price * (item.profit / 100) * item.quantity;
+        return (
+          acc +
+          profitMarginCalculatorPerItem(
+            data.discountFormula,
+            item.price,
+            itemDiscount,
+            item.profit,
+            item.quantity
+          )
+        );
       }
     } else if (data.useItemPriceAsFallback && getType(item.price) === 'number') {
-      return acc + item.price * item.quantity;
+      return acc + (item.price - itemDiscount) * item.quantity;
     }
     return acc;
   }, 0.0);
 
+  const useOrderLevelDiscount = useDiscount && data.discountType === 'order';
+  if (useOrderLevelDiscount && !useItemLevelDiscount) {
+    const discountKey = data.discountKey || 'discount';
+    const orderDiscount = makeNumber(getEventData(discountKey)) || 0;
+    profit = profit - orderDiscount;
+  }
+
   if (data.roundResult) return makeNumber(Math.round(profit * 100) / 100);
   return profit;
+}
+
+function profitMarginCalculatorPerItem(formula, price, discount, margin, quantity) {
+  if (formula === 'discountOverItemPrice') {
+    return (price - discount) * (margin / 100) * quantity;
+  } else if (formula === 'discountOverItemProfit') {
+    return (price * (margin / 100) - discount) * quantity;
+  }
+  return price * (margin / 100) * quantity;
 }
 
 /*==============================================================================
@@ -1113,8 +1215,8 @@ scenarios:
       assertThat(templateDataStorageSetItemCopyWasCalled, 'Should not call templateDataStorage.setItemCopy.').isFalse();
       assertApi('sendHttpRequest').wasNotCalled();
     });
-- name: '[Request] Items Profit Product Feed Requests are not succesful, only Item
-    Price and Item Quantity should be passed to Promise All'
+- name: '[Request] Items Profit Product Feed Requests are not successful, only Item
+    Price, Item Quantity should be passed to Promise All'
   code: "setGetEventData([GA4ITEMS[0]]);\n\n[\n  {\n    description: 'Items Profit\
     \ Product Feed Requests returns something different than 200',\n    mock: (resolve,\
     \ reject) => { resolve({ statusCode: 400 }); }\n  },\n  {\n    description: 'Items\
@@ -1127,8 +1229,9 @@ scenarios:
     \    return Promise.create((resolve, reject) => {\n      scenario.mock(resolve,\
     \ reject);\n    });\n  });\n  \n  mockObject('Promise', {\n    all: (promises)\
     \ => {\n      return promises[0].then((baseItem) => {\n        callLater(() =>\
-    \ assertThat(baseItem).isEqualTo({ price: GA4ITEMS[0].price, quantity: GA4ITEMS[0].quantity\
-    \ }) );\n        return [baseItem];\n      });\n    }\n  });\n  \n  runCode(copyMockData);\n\
+    \ assertThat(baseItem)\n          .isEqualTo({ \n            price: GA4ITEMS[0].price,\
+    \ \n            quantity: GA4ITEMS[0].quantity,\n            discount: 0}) );\n\
+    \        return [baseItem];\n      });\n    }\n  });\n  \n  runCode(copyMockData);\n\
     });"
 - name: '[Request] If an error happens when calculating profit, the variable must
     return undefined'
@@ -1136,11 +1239,9 @@ scenarios:
     \nmock('sendHttpRequest', (requestUrl, requestOptions, requestBody) => {\n  return\
     \ Promise.create((resolve) => {\n    resolve({ \n      statusCode: 200, \n   \
     \   body: JSON.stringify(EXPECTED_SUCCESS_PRODUCT_FEED_ITEM_RETURN_OBJECT)\n \
-    \   });\n  });\n});\n\nmockObject('Promise', {\n  all: (promises) => {\n    return\
-    \ promises[0].then((baseItem) => {\n      assertThat(baseItem).isEqualTo({ price:\
-    \ GA4ITEMS[0].price, quantity: GA4ITEMS[0].quantity });\n      return Promise.create((resolve,\
-    \ reject) => reject('Some error inside Promise.all().then(itemsWithProfitInfo)'));\n\
-    \    });\n  }\n});\n\nrunCode(copyMockData).then((variableResult) => {\n  assertThat(variableResult).isUndefined();\n\
+    \   });\n  });\n});\n\nmockObject('Promise', {\n  all: (promises) => Promise.create((resolve,\
+    \ reject) => reject('Some error inside Promise.all().then(itemsWithProfitInfo)'))\n\
+    });\n\nrunCode(copyMockData).then((variableResult) => {\n  assertThat(variableResult).isUndefined();\n\
     });"
 - name: '[Profit Calculation] Item does not have profit info and price is not used
     as fallback'
@@ -1239,6 +1340,88 @@ scenarios:
     \ => resolve({ \n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
     \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  // 5.50 (absolute\
     \ margin) * 3 (quantity) = 16.50\n  assertThat(profit).isEqualTo(16.5);\n});"
+- name: '[Discount] Default Behavior if Discount Feature is disabled'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'abs_margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n});\n\nsetGetEventData();\n\nmock('sendHttpRequest',\
+    \ (requestUrl) => {\n  const mockResponseBody = {\n    success: true,\n    data:\
+    \ {\n      data: { abs_margin: 5.50, type_margin: 'absolute' }\n    }\n  };\n\n\
+    \  return Promise.create((resolve) => resolve({ \n    statusCode: 200, \n    body:\
+    \ JSON.stringify(mockResponseBody) \n  }));\n});\n\nrunCode(copyMockData).then((profit)\
+    \ => {\n  assertThat(profit).isEqualTo(33);\n});"
+- name: '[Discount] Successfully calculate profit with absolute discount'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'abs_margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n  useDiscount: true,\n  discountType:\
+    \ 'item',\n  discountKey: 'discount',\n  discountFormula: 'discountOverItemPrice'\n\
+    });\n\nsetGetEventData();\n\nmock('sendHttpRequest', (requestUrl) => {\n  const\
+    \ mockResponseBody = {\n    success: true,\n    data: {\n      data: { abs_margin:\
+    \ 5.50, type_margin: 'absolute' }\n    }\n  };\n\n  return Promise.create((resolve)\
+    \ => resolve({\n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
+    \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  assertThat(profit).isEqualTo(11);\n\
+    });"
+- name: '[Discount] Successfully calculate profit with percent discount deducted from
+    item price'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n  useDiscount: true,\n  discountType:\
+    \ 'item',\n  discountKey: 'discount',\n  discountFormula: 'discountOverItemPrice',\n\
+    \  roundResult: true\n});\n\nsetGetEventData();\n\nmock('sendHttpRequest', (requestUrl)\
+    \ => {\n  const mockResponseBody = {\n    success: true,\n    data: {\n      data:\
+    \ { margin: 30, type_margin: 'percent' }\n    }\n  };\n\n  return Promise.create((resolve)\
+    \ => resolve({ \n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
+    \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  assertThat(profit).isEqualTo(38.89);\n\
+    });"
+- name: '[Discount] Successfully calculate profit with percent discount deducted from
+    item profit'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n  useDiscount: true,\n  discountType:\
+    \ 'item',\n  discountKey: 'discount',\n  discountFormula: 'discountOverItemProfit',\n\
+    \  roundResult: true\n});\n\nsetGetEventData();\n\nmock('sendHttpRequest', (requestUrl)\
+    \ => {\n  const mockResponseBody = {\n    success: true,\n    data: {\n      data:\
+    \ { margin: 30, type_margin: 'percent' }\n    }\n  };\n\n  return Promise.create((resolve)\
+    \ => resolve({ \n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
+    \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  assertThat(profit).isEqualTo(23.49);\n\
+    });"
+- name: '[Discount] Successfully calculate profit with order-level discount'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n  useDiscount: true,\n  discountType:\
+    \ 'order',\n  discountKey: 'order_discount'\n});\n\nmock('getEventData', (key)\
+    \ => {\n  if (key === 'items') {\n    return [{ item_id: 'SKU-001', price: 100,\
+    \ quantity: 2 }];\n  }\n  if (key === 'order_discount') return 10;\n  return undefined;\n\
+    });\n\nmock('sendHttpRequest', (requestUrl) => {\n  const mockResponseBody = {\n\
+    \    success: true,\n    data: {\n      data: { margin: 20, type_margin: 'percent'\
+    \ }\n    }\n  };\n  return Promise.create((resolve) => resolve({ \n    statusCode:\
+    \ 200, \n    body: JSON.stringify(mockResponseBody) \n  }));\n});\n\nrunCode(copyMockData).then((profit)\
+    \ => {\n  // Profit: (100 * 0.20 * 2) = 40. Then Order Discount: 40 - 10 = 30.\n\
+    \  assertThat(profit).isEqualTo(30);\n});"
+- name: '[Discount] Successfully falls back to GA4 ''discount'' key if discountKey
+    is left empty'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n  useDiscount: true,\n  discountType:\
+    \ 'item',\n  discountKey: '', // Intentionally left empty\n  discountFormula:\
+    \ 'discountOverItemPrice'\n});\n\nsetGetEventData([\n  { \n    item_id: 'SKU-001',\
+    \ \n    price: 100, \n    quantity: 1, \n    discount: 15 \n  }\n]);\n\nmock('sendHttpRequest',\
+    \ (requestUrl) => {\n  const mockResponseBody = {\n    success: true,\n    data:\
+    \ {\n      data: { margin: 50, type_margin: 'percent' }\n    }\n  };\n  return\
+    \ Promise.create((resolve) => resolve({ \n    statusCode: 200, \n    body: JSON.stringify(mockResponseBody)\
+    \ \n  }));\n});\n\nrunCode(copyMockData).then((profit) => {\n  // (100 (price)\
+    \ - 15 (discount)) * 0.50 margin * 1 qty = 42.50\n  assertThat(profit).isEqualTo(42.5);\n\
+    });"
+- name: '[Discount] Successfully applies discount when falling back to Item Price'
+  code: "const copyMockData = setAllMockData('ga4', {\n  productFeedSource: 'stapeStore',\n\
+    \  stapeStoreCollectionName: 'wholesale_feed',\n  stapeStoreValueKey: 'margin',\n\
+    \  stapeStoreValueTypeKey: 'type_margin',\n  useItemPriceAsFallback: true,\n \
+    \ useDiscount: true,\n  discountType: 'item',\n  discountKey: 'discount'\n});\n\
+    \nsetGetEventData([\n  { item_id: 'SKU-001', price: 50, quantity: 2, discount:\
+    \ 5 }\n]);\n\nmock('sendHttpRequest', (requestUrl) => {\n  // Mock a 404 Not Found\
+    \ response (Margin info missing)\n  return Promise.create((resolve) => resolve({\
+    \ \n    statusCode: 404, \n    body: JSON.stringify({ success: false }) \n  }));\n\
+    });\n\nrunCode(copyMockData).then((profit) => {\n  //50 (price) - 5 (discount)\
+    \ * 2 qty = 90\n  assertThat(profit).isEqualTo(90);\n});"
 setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\nconst\
   \ parseUrl = require('parseUrl');\nconst Object = require('Object');\nconst makeInteger\
   \ = require('makeInteger');\nconst makeNumber = require('makeNumber');\nconst toBase64\
@@ -1252,16 +1435,16 @@ setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\ncons
   \ = {\n      price: makeNumber(item.price) || undefined,\n      quantity: makeInteger(item.quantity)\
   \ || 1\n    };\n    \n    if (profit && profitType) {\n      baseItem.profit = profit;\n\
   \      baseItem.profitType = profitType;\n    }\n    \n    return baseItem;\n  });\n\
-  };\n\nconst GA4ITEMS = [{ item_id: '1', price: 10.01, quantity: 3 }, { item_id:\
-  \ '2', price: 21.01 }, { item_id: '3', price: 50.3, quantity: 2 }];\nconst setGetEventData\
-  \ = (customGA4Items) => {\n  mock('getEventData', (key) => {\n    if (key !== 'items')\
-  \ return;\n    return customGA4Items || GA4ITEMS;\n  });\n};\n\nconst expectedBigQuerySettings\
-  \ = {\n  logBigQueryProjectId: 'logBigQueryProjectId',\n  logBigQueryDatasetId:\
-  \ 'logBigQueryDatasetId',\n  logBigQueryTableId: 'logBigQueryTableId'\n};\n\nconst\
-  \ requiredConsoleKeys = ['Type', 'TraceId', 'Name'];\nconst requiredBqKeys = ['timestamp',\
-  \ 'type', 'trace_id', 'tag_name'];\nconst expectedBqOptions = { ignoreUnknownValues:\
-  \ true };\n\nconst mockData = {\n  useOptimisticScenario: false,\n  adStorageConsent:\
-  \ 'optional',\n  logBigQueryProjectId: expectedBigQuerySettings.logBigQueryProjectId,\n\
+  };\n\nconst GA4ITEMS = [{ item_id: '1', price: 10.01, quantity: 3, discount: 3 },\
+  \ { item_id: '2', price: 21.01, discount: 5 }, { item_id: '3', price: 50.3, quantity:\
+  \ 2, discount: 4 }];\n\nconst setGetEventData = (customGA4Items) => {\n  mock('getEventData',\
+  \ (key) => {\n    if (key !== 'items') return;\n    return customGA4Items || GA4ITEMS;\n\
+  \  });\n};\n\nconst expectedBigQuerySettings = {\n  logBigQueryProjectId: 'logBigQueryProjectId',\n\
+  \  logBigQueryDatasetId: 'logBigQueryDatasetId',\n  logBigQueryTableId: 'logBigQueryTableId'\n\
+  };\n\nconst requiredConsoleKeys = ['Type', 'TraceId', 'Name'];\nconst requiredBqKeys\
+  \ = ['timestamp', 'type', 'trace_id', 'tag_name'];\nconst expectedBqOptions = {\
+  \ ignoreUnknownValues: true };\n\nconst mockData = {\n  useDiscount: false,\n  useOptimisticScenario:\
+  \ false,\n  adStorageConsent: 'optional',\n  logBigQueryProjectId: expectedBigQuerySettings.logBigQueryProjectId,\n\
   \  logBigQueryDatasetId: expectedBigQuerySettings.logBigQueryDatasetId,\n  logBigQueryTableId:\
   \ expectedBigQuerySettings.logBigQueryTableId\n};\n\nconst CUSTOMITEMS = [{ id:\
   \ '1', p: 10.01, qtd: 3 }, { id: '2', p: 21.01 }, { id: '3', p: 50.3, qtd: 2 }];\n\
@@ -1297,9 +1480,13 @@ setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\ncons
 
 ___NOTES___
 
-Created on 17/09/2024, 11:34:39
+2026-05-14 - Change Notes:
+  - Add discount feature
+  - Add tests to cover discount feature
 
-2026/04/24 - Change Notes:
- - Add support to Stape Store collections
- - Add tests
+2026-04-24 - Change Notes:
+  - Add support to Stape Store collections
+  - Add tests
+ 
+Created on 17/09/2024, 11:34:39
 
