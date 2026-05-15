@@ -191,20 +191,17 @@ function getProfitforItems(data, items) {
 
 function calculateProfit(itemsWithProfitInfo) {
   const useDiscount = data.useDiscount;
-  const itemLevelDiscount = useDiscount && data.discountType === 'item';
-  const orderLevelDiscount = useDiscount && data.discountType === 'order';
-  const discountKey = data.discountKey || 'discount';
-  const orderDiscount = orderLevelDiscount ? makeNumber(getEventData(discountKey)) || 0 : 0;
 
+  const useItemLevelDiscount = useDiscount && data.discountType === 'item';
   let profit = itemsWithProfitInfo.reduce((acc, item) => {
-    const itemDiscount = itemLevelDiscount ? item.discount : 0;
+    const itemDiscount = useItemLevelDiscount ? item.discount : 0;
     if (getType(item.profit) === 'number') {
       if (item.profitType === 'absolute') {
         return acc + (item.profit - itemDiscount) * item.quantity;
       } else if (item.profitType === 'percent' && getType(item.price) === 'number') {
         return (
           acc +
-          profitMarginCalculator(
+          profitMarginCalculatorPerItem(
             data.discountFormula,
             item.price,
             itemDiscount,
@@ -219,12 +216,18 @@ function calculateProfit(itemsWithProfitInfo) {
     return acc;
   }, 0.0);
 
-  if (orderLevelDiscount) profit = profit - orderDiscount;
+  const useOrderLevelDiscount = useDiscount && data.discountType === 'order';
+  if (useOrderLevelDiscount && !useItemLevelDiscount) {
+    const discountKey = data.discountKey || 'discount';
+    const orderDiscount = makeNumber(getEventData(discountKey)) || 0;
+    profit = profit - orderDiscount;
+  }
+
   if (data.roundResult) return makeNumber(Math.round(profit * 100) / 100);
   return profit;
 }
 
-function profitMarginCalculator(formula, price, discount, margin, quantity) {
+function profitMarginCalculatorPerItem(formula, price, discount, margin, quantity) {
   if (formula === 'discountOverItemPrice') {
     return (price - discount) * (margin / 100) * quantity;
   } else if (formula === 'discountOverItemProfit') {

@@ -382,7 +382,7 @@ scenarios:
         assertApi('sendHttpRequest').wasNotCalled();
       });
 
-  - name: '[Request] Items Profit Product Feed Requests are not succesful, only Item Price and Item Quantity should be passed to Promise All'
+  - name: '[Request] Items Profit Product Feed Requests are not successful, only Item Price, Item Quantity should be passed to Promise All'
     code: |-
       setGetEventData([GA4ITEMS[0]]);
 
@@ -411,7 +411,11 @@ scenarios:
         mockObject('Promise', {
           all: (promises) => {
             return promises[0].then((baseItem) => {
-              callLater(() => assertThat(baseItem).isEqualTo({ price: GA4ITEMS[0].price, quantity: GA4ITEMS[0].quantity }) );
+              callLater(() => assertThat(baseItem)
+                .isEqualTo({
+                  price: GA4ITEMS[0].price,
+                  quantity: GA4ITEMS[0].quantity,
+                  discount: 0}) );
               return [baseItem];
             });
           }
@@ -435,12 +439,7 @@ scenarios:
       });
 
       mockObject('Promise', {
-        all: (promises) => {
-          return promises[0].then((baseItem) => {
-            assertThat(baseItem).isEqualTo({ price: GA4ITEMS[0].price, quantity: GA4ITEMS[0].quantity });
-            return Promise.create((resolve, reject) => reject('Some error inside Promise.all().then(itemsWithProfitInfo)'));
-          });
-        }
+        all: (promises) => Promise.create((resolve, reject) => reject('Some error inside Promise.all().then(itemsWithProfitInfo)'))
       });
 
       runCode(copyMockData).then((variableResult) => {
@@ -708,9 +707,9 @@ scenarios:
           }
         };
 
-        return Promise.create((resolve) => resolve({ 
-          statusCode: 200, 
-          body: JSON.stringify(mockResponseBody) 
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
         }));
       });
 
@@ -742,9 +741,9 @@ scenarios:
           }
         };
 
-        return Promise.create((resolve) => resolve({ 
-          statusCode: 200, 
-          body: JSON.stringify(mockResponseBody) 
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
         }));
       });
 
@@ -778,9 +777,9 @@ scenarios:
           }
         };
 
-        return Promise.create((resolve) => resolve({ 
-          statusCode: 200, 
-          body: JSON.stringify(mockResponseBody) 
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
         }));
       });
 
@@ -814,9 +813,9 @@ scenarios:
           }
         };
 
-        return Promise.create((resolve) => resolve({ 
-          statusCode: 200, 
-          body: JSON.stringify(mockResponseBody) 
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
         }));
       });
 
@@ -851,9 +850,9 @@ scenarios:
             data: { margin: 20, type_margin: 'percent' }
           }
         };
-        return Promise.create((resolve) => resolve({ 
-          statusCode: 200, 
-          body: JSON.stringify(mockResponseBody) 
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
         }));
       });
 
@@ -876,10 +875,10 @@ scenarios:
       });
 
       setGetEventData([
-       { item_id: 'SKU-001', 
-        price: 100, 
-        quantity: 1, 
-        discount: 15 
+       { item_id: 'SKU-001',
+        price: 100,
+        quantity: 1,
+        discount: 15
        }
       ]);
 
@@ -890,9 +889,9 @@ scenarios:
             data: { margin: 50, type_margin: 'percent' }
           }
         };
-        return Promise.create((resolve) => resolve({ 
-          statusCode: 200, 
-          body: JSON.stringify(mockResponseBody) 
+        return Promise.create((resolve) => resolve({
+          statusCode: 200,
+          body: JSON.stringify(mockResponseBody)
         }));
       });
 
