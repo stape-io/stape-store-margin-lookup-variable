@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/stape-store-margin-lookup-variable'
 versions:
+  - sha: 9b5f4250e410f7b513419c99af6ae2db1f23d6c4
+    changeNotes: Bug fix on discounts logic.
   - sha: c5c89bcd8419540a43fe5b0a4281d9ca443ef134
     changeNotes: Console and BigQuery logging removal.
   - sha: 9c9365efc03c45d0bfe20b5e9a5d6cedf4889465
