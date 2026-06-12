@@ -160,7 +160,7 @@ function calculateProfit(itemsWithProfitInfo) {
 
   const useItemLevelDiscount = useDiscount && data.discountType === 'item';
   let profit = itemsWithProfitInfo.reduce((acc, item) => {
-    const itemDiscount = useItemLevelDiscount ? makeNumber(item.discount) || 0 : 0;
+    const itemDiscount = useItemLevelDiscount ? item.discount : 0;
     if (getType(item.profit) === 'number') {
       if (item.profitType === 'absolute') {
         return acc + (item.profit - itemDiscount) * item.quantity;

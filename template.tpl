@@ -521,7 +521,7 @@ function calculateProfit(itemsWithProfitInfo) {
 
   const useItemLevelDiscount = useDiscount && data.discountType === 'item';
   let profit = itemsWithProfitInfo.reduce((acc, item) => {
-    const itemDiscount = useItemLevelDiscount ? makeNumber(item.discount) || 0 : 0;
+    const itemDiscount = useItemLevelDiscount ? item.discount : 0;
     if (getType(item.profit) === 'number') {
       if (item.profitType === 'absolute') {
         return acc + (item.profit - itemDiscount) * item.quantity;
@@ -595,22 +595,10 @@ ___SERVER_PERMISSIONS___
       },
       "param": [
         {
-          "key": "keyPatterns",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 1,
-                "string": "items"
-              }
-            ]
-          }
-        },
-        {
           "key": "eventDataAccess",
           "value": {
             "type": 1,
-            "string": "specific"
+            "string": "any"
           }
         }
       ]
@@ -1156,7 +1144,7 @@ setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\ncons
 ___NOTES___
 
 2026-06-12 Change Notes:
- - Bug fix on discounts logic.
+ - Bug fix on accessing Event Data keys.
 
 2026-05-20 Change Notes:
  - Console and BigQuery logging removal.
@@ -1170,5 +1158,4 @@ ___NOTES___
   - Add tests
  
 Created on 17/09/2024, 11:34:39
-
 
