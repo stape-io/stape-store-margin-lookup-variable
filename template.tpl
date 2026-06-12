@@ -595,22 +595,10 @@ ___SERVER_PERMISSIONS___
       },
       "param": [
         {
-          "key": "keyPatterns",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 1,
-                "string": "items"
-              }
-            ]
-          }
-        },
-        {
           "key": "eventDataAccess",
           "value": {
             "type": 1,
-            "string": "specific"
+            "string": "any"
           }
         }
       ]
@@ -1154,6 +1142,9 @@ setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\ncons
 
 
 ___NOTES___
+
+2026-06-12 Change Notes:
+ - Bug fix on accessing Event Data keys.
 
 2026-05-20 Change Notes:
  - Console and BigQuery logging removal.
