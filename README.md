@@ -13,7 +13,7 @@ When using Stape Store to store margin data, you must organize it following the 
 
 - **Document ID** — must match the product ID used in your `items` array (e.g., the value of `item_id`).
 - **Margin value field** — a numeric field holding the margin amount. Defaults to `margin`; configurable via the **Feed key for profit margin value** setting in the template.
-- **Margin type field** *(optional)* — a string field set to either `absolute` (fixed currency amount) or `percentage` (fraction of revenue). Defaults to `value_type`; configurable via the **Feed key for profit margin value type** setting.
+- **Margin type field** *(optional)* — a string field set to either `absolute` (fixed currency amount) or `percent` (fraction of revenue). Defaults to `value_type`; configurable via the **Feed key for profit margin value type** setting.
 
 Product data can be uploaded to Stape Store via the [REST API](https://api.store.stape.io/store-api/v2/doc) or through the [CSV import](https://stape.io/blog/profit-tracking-sgtm-stape-store#2-add-product-margin-data-to-stape-store) feature in the Stape Store interface.
 
