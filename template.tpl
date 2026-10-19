@@ -13,12 +13,12 @@ ___INFO___
   "id": "cvt_temp_public_id",
   "version": 1,
   "securityGroups": [],
-  "displayName": "Stape Store Margin Lookup",
+  "displayName": "Stape Margin Lookup",
   "categories": [
     "UTILITY",
     "DATA_WAREHOUSING"
   ],
-  "description": "This variable allows you to retrieve profit margin data from the Product Feed for each product in your items array and returns a combined profit margin value (accounting for quantity).",
+  "description": "Retrieves profit margin data from the POAS Data Feed or Stape Data Store (formerly Stape Store) for each product in your items array and returns a combined profit margin adjusted for quantity.",
   "containerContexts": [
     "SERVER"
   ]
@@ -133,12 +133,12 @@ ___TEMPLATE_PARAMETERS___
           },
           {
             "value": "stapeStore",
-            "displayValue": "Stape Store"
+            "displayValue": "Stape Data Store"
           }
         ],
         "simpleValueType": true,
         "defaultValue": "poas",
-        "help": "By default this variable will lookup on \u003ci\u003ePOAS Data Feed\u003c/i\u003e Power Up database in your Stape account.\n\u003cbr/\u003e\nSelect \u003ci\u003eStape Store\u003c/i\u003e to lookup in a database from Stape Store.\n\u003cbr/\u003e\u003cbr/\u003e\nLearn more:\n\u003cbr/\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ca href\u003d\"https://stape.io/helpdesk/documentation/poas-data-feed-power-up\"\u003eHow to set up POAS Data Feed\u003c/a\u003e\u003c/li\u003e\n\u003cli\u003e\u003ca href\u003d\"https://github.com/stape-io/stape-store-margin-lookup-variable#how-to-configure-stape-store-as-a-product-feed-source\"\u003eHow to set up Stape Store Data Feed\u003c/a\u003e\u003c/li\u003e\n\u003c/ul\u003e"
+        "help": "By default this variable will lookup on \u003ci\u003ePOAS Data Feed\u003c/i\u003e Power Up database in your Stape account.\n\u003cbr/\u003e\nSelect \u003ci\u003eStape Data Store\u003c/i\u003e to lookup in a database from Stape Data Store.\n\u003cbr/\u003e\u003cbr/\u003e\nLearn more:\n\u003cbr/\u003e\n\u003cul\u003e\n\u003cli\u003e\u003ca href\u003d\"https://stape.io/helpdesk/documentation/poas-data-feed-power-up\"\u003eHow to set up POAS Data Feed\u003c/a\u003e\u003c/li\u003e\n\u003cli\u003e\u003ca href\u003d\"https://github.com/stape-io/stape-store-margin-lookup-variable#how-to-configure-stape-store-as-a-product-feed-source\"\u003eHow to set up Stape Data Store Data Feed\u003c/a\u003e\u003c/li\u003e\n\u003c/ul\u003e"
       },
       {
         "type": "GROUP",
@@ -149,7 +149,7 @@ ___TEMPLATE_PARAMETERS___
             "name": "stapeStoreCollectionName",
             "displayName": "Collection name",
             "simpleValueType": true,
-            "help": "Enter your collection name as it shows on Stape Store. If left empty it will use the \u003cb\u003edefault\u003c/b\u003e collection.",
+            "help": "Enter your collection name as it shows on Stape Data Store. If left empty it will use the \u003cb\u003edefault\u003c/b\u003e collection.",
             "defaultValue": "default",
             "valueHint": "default"
           },
@@ -207,7 +207,7 @@ ___TEMPLATE_PARAMETERS___
             "displayName": "Stape Container API Key",
             "simpleValueType": true,
             "valueHint": "euk:kzlfoobar:55ec021d429be49e64e691429cf0f27440a1b789kzlfoobar",
-            "help": "If you want to interact with the Stape POAS Data Feed or Stape Store of a different container hosted on Stape, specify the \u003cb\u003eContainer API Key\u003c/b\u003e of this container.\n\u003cbr/\u003e\u003cbr/\u003e\nTo find the \u003cb\u003eContainer API Key\u003c/b\u003e, go to the \u003ca href\u003d\"https://app.eu.stape.dev/container\"\u003eStape Admin panel\u003c/a\u003e, select the sGTM container which contains the Stape POAS Data Feed or Stape Store you want to interact with, go to the \u003ci\u003eSettings\u003c/i\u003e tab and scroll down to the \u003ci\u003eContainer settings\u003c/i\u003e section.",
+            "help": "If you want to interact with the Stape POAS Data Feed or Stape Data Store of a different container hosted on Stape, specify the \u003cb\u003eContainer API Key\u003c/b\u003e of this container.\n\u003cbr/\u003e\u003cbr/\u003e\nTo find the \u003cb\u003eContainer API Key\u003c/b\u003e, go to the \u003ca href\u003d\"https://app.eu.stape.dev/container\"\u003eStape Admin panel\u003c/a\u003e, select the sGTM container which contains the Stape POAS Data Feed or Stape Data Store you want to interact with, go to the \u003ci\u003eSettings\u003c/i\u003e tab and scroll down to the \u003ci\u003eContainer settings\u003c/i\u003e section.",
             "enablingConditions": [
               {
                 "paramName": "useDifferentStapeProductFeed",
@@ -1143,6 +1143,9 @@ setup: "const JSON = require('JSON');\nconst Promise = require('Promise');\ncons
 
 ___NOTES___
 
+2026-10-19 - Change Notes:
+  - Stape Store was renamed to Stape Data Store.
+
 2026-06-12 Change Notes:
  - Bug fix on accessing Event Data keys.
 
@@ -1156,6 +1159,5 @@ ___NOTES___
 2026-04-24 - Change Notes:
   - Add support to Stape Store collections
   - Add tests
- 
-Created on 17/09/2024, 11:34:39
 
+Created on 17/09/2024, 11:34:39
