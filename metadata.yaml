@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/stape-store-margin-lookup-variable'
 versions:
+  - sha: 0a841215363f03aa2bb37f5dfd29486566d93a22
+    changeNotes: Stape Store was renamed to Stape Data Store.
   - sha: 05362bbb542480eed950aa13ea1845e017f46743
     changeNotes: Bug fix on accessing Event Data keys.
   - sha: c5c89bcd8419540a43fe5b0a4281d9ca443ef134
